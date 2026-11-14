@@ -3,7 +3,8 @@
 ```
 fetch_sol.py --> sol_samples.csv --> feeder.py --ws--> server.py --ws--> Unity  PythonConnection.cs
                                                           ^   |
-                                     JMARS export.csv ----+   +-- heightmap --> Terraingen.cs
+          make_site.py --> site/ (terrain.csv + images) --+   +-- heightmap --> Terraingen.cs
+                         (or a JMARS export.csv)              +-- photo / slope / thermal images --> TerrainOverlay
 raster_to_csv.py / prep_terrain.py --> extra map layers (CSV / files), not sent over the socket
 ```
 
@@ -11,9 +12,11 @@ raster_to_csv.py / prep_terrain.py --> extra map layers (CSV / files), not sent 
 |---|---|
 | `fetch_sol.py` | Downloads one sol of real Curiosity RAD (radiation) + REMS (temperature, pressure) data from NASA PDS and writes `sol_samples.csv` + `sol_samples.meta.json` |
 | `feeder.py` | Replays `sol_samples.csv` and the scripted `events.json` onto the EVA clock, sends JSON to the server |
-| `server.py` | WebSocket server on `ws://localhost:8765`, two jobs: (1) sends Unity the terrain heightmap from a JMARS CSV (or a demo terrain) when asked; (2) relays everything the feeder sends to every Unity client, and late joiners get the last status + telemetry |
+| `server.py` | WebSocket server on `ws://localhost:8765`, two jobs: (1) sends Unity the terrain when asked: `site/` if it exists, else a JMARS CSV you name, else a demo terrain; (2) relays everything the feeder sends to every Unity client, and late joiners get the last status + telemetry |
+| `make_site.py` | **Real terrain**: HiRISE terrain model + colour photo + slope + thermal inertia around Curiosity's sol-4560 position -> `site/` |
+| `site/` | Made by `make_site.py`: `terrain.csv`, `photo.jpg`, `slope.jpg`, `thermal.jpg`, `site.json` (about 13 MB) |
 | `requirements.txt` | Server, feeder and `fetch_sol.py` (numpy, websockets) |
-| `requirements-maps.txt` | Adds rasterio, pyproj, pillow for `raster_to_csv.py` and `prep_terrain.py` only |
+| `requirements-maps.txt` | Adds rasterio, pyproj, pillow for `make_site.py`, `raster_to_csv.py` and `prep_terrain.py` only |
 | `raster_to_csv.py` | Any map raster (GeoTIFF / ISIS cube, local or URL) -> CSV grid over a 2 km box: thermal inertia, elevation, or slope with ok / caution / no-go classes |
 | `prep_terrain.py` | HiRISE terrain model + photo -> Unity heightmap, photo, slope, route-cost grid, meta.json |
 | `sol_samples.csv` | **Real data**: sol 4560 (2025-06-03), 09:00-13:00 Mars local time. Regenerate with `fetch_sol.py` |
@@ -33,8 +36,9 @@ python3 -m venv .venv
 Then (plain `python3` is fine: `server.py` and `feeder.py` re-launch themselves with `.venv`):
 
 ```
-python3 Python/server.py                      # terminal 1, demo terrain
-python3 Python/server.py export.csv 1025      #   ...or real terrain from a JMARS pixel export
+python3 Python/server.py                      # terminal 1: real terrain from Python/site/ (demo if it's missing)
+python3 Python/server.py --demo               #   ...or the fake demo terrain
+python3 Python/server.py export.csv 1025      #   ...or a JMARS pixel export
 python3 Python/feeder.py --speed 80           # terminal 2: 4-hour EVA in 3 minutes
 ```
 
@@ -45,15 +49,56 @@ asks for the heightmap once (Terraingen falls back to Perlin terrain if none arr
 logs events / Earth notes to the Console. Tick **Log Messages** on the component to see every
 message. For a quick test run use `--speed 3600 --tick 0.05` (4 seconds).
 
+## Real terrain + photo overlays (HiRISE)
+
+`make_site.py` builds a 2 km x 2 km site centred on **Curiosity's real position on sol 4560**
+(lat -4.79985, lon 137.38354 E, from NASA's MSL waypoint list), the same sol as the weather and
+radiation replay. It writes `Python/site/`:
+
+| File | What it is |
+|---|---|
+| `terrain.csv` | `Latitude,Longitude,Elevation` (m), 501 x 501 points 4 m apart, from a HiRISE terrain model. Same format as a JMARS export, so `server.py` loads it the same way |
+| `photo.jpg` | HiRISE natural-colour photo of exactly the same box, 2048 px (~1 m per pixel) |
+| `slope.jpg` | The photo with amber = 15-20 deg (caution) and red = 20+ deg (no-go) slopes |
+| `thermal.jpg` | The photo with THEMIS thermal inertia: blue = finer, looser ground, red = rockier (relative, 100 m pixels) |
+| `site.json` | Name, sol, date, centre, size, the layer labels/credits and the exact source URLs |
+
+```
+.venv/bin/pip install -r Python/requirements-maps.txt   # once
+.venv/bin/python Python/make_site.py                     # ~20 s, downloads only the box (tens of MB)
+python3 Python/server.py                                 # picks up Python/site/ automatically
+```
+
+When Unity asks for the terrain, the server sends the site info, then the heightmap, then the three
+images. Terraingen builds the terrain at true height (`vertical_exaggeration` 1, so the
+~500 m of relief is real), and `TerrainOverlay` drapes the photo (or the slope / thermal version) on it,
+north up. Options: `--sol N` (where the rover was on another sol), `--center-lat/--center-lon`,
+`--size-m`, `--cell-m`, `--tex-px`; `--help` lists them all.
+
+The photo mosaic and the terrain model are tied to different base maps and disagree by about 49 m here.
+The script measures the offset against the terrain model's own orthoimage and moves the terrain
+onto the photo (`dtm_shift_to_photo` in `site.json`), so ridges, slope colours and the rover position
+line up. The shift is a translation only, and the photo is also rotated about 0.3° against the terrain
+model, so the match is within ~1 m at the rover (box centre) but up to ~10 m off at the box corners.
+It also checks that every sample lands on its grid point and stops if one doesn't.
+
+Sources (credits are in `site.json` too):
+- Rover position: [MSL waypoints](https://mars.nasa.gov/mmgis-maps/MSL/Layers/json/MSL_waypoints.json), NASA/JPL
+- Elevation: HiRISE terrain model DTEEC_019698_1750_019988_1750_U01, 1 m, NASA/JPL/University of Arizona, via [USGS STAC](https://stac.astrogeology.usgs.gov/api/collections/mro_hirise_socet_dtms) (if a site isn't covered, the script searches STAC for another model)
+- Photo: [USGS HiRISE colour mosaic of Gale](https://asc-pds-services.s3.us-west-2.amazonaws.com/mosaic/Mars/MSL/MSL_Gale_HiRISE-LRGB_78quads_sharp_cog.tif), 0.25 m
+- Thermal inertia: Mars Odyssey THEMIS 100 m mosaic, ASU / USGS (same tile as below)
+- Slope limits: 15 / 20 deg, borrowed from Artemis lunar EVA planning, not a Mars-specific NASA limit
+
 ## Data sources
 
 | Data | From | Script | Used for |
 |---|---|---|---|
 | Radiation dose rate | Curiosity RAD, [PDS PPI node](https://pds-ppi.igpp.ucla.edu/data/MSL-M-RAD-3-RDR-V1.0/) | `fetch_sol.py` | HUD dose + accumulated dose |
 | Air temperature, pressure | Curiosity REMS, [PDS Atmospheres node](https://atmos.nmsu.edu/PDS/data/mslrem_1001/) | `fetch_sol.py` | HUD weather |
-| Thermal inertia (sand vs rock) | Mars Odyssey THEMIS, [USGS tile 30S120E](https://astrogeology.usgs.gov/search/map/themis_thermal_inertia_mosaic_quantitative_30s120e_100mpp) | `raster_to_csv.py` | Hazard layer |
-| Elevation, slope | MRO HiRISE terrain models, [USGS STAC](https://stac.astrogeology.usgs.gov/api/collections/mro_hirise_socet_dtms) | `raster_to_csv.py`, `prep_terrain.py` | Terrain, no-go areas, route |
-| Photo | MRO HiRISE orthoimage | `prep_terrain.py` | Texture on the terrain |
+| Thermal inertia (sand vs rock) | Mars Odyssey THEMIS, [USGS tile 30S120E](https://astrogeology.usgs.gov/search/map/themis_thermal_inertia_mosaic_quantitative_30s120e_100mpp) | `make_site.py`, `raster_to_csv.py` | Thermal layer, hazard layer |
+| Elevation, slope | MRO HiRISE terrain models, [USGS STAC](https://stac.astrogeology.usgs.gov/api/collections/mro_hirise_socet_dtms) | `make_site.py`, `raster_to_csv.py`, `prep_terrain.py` | Terrain, no-go areas, route |
+| Photo | MRO HiRISE colour mosaic of Gale (USGS) / HiRISE orthoimages | `make_site.py`, `prep_terrain.py` | Texture on the terrain |
+| Rover position | NASA MSL waypoints | `make_site.py` | Centre of the site |
 
 **No wind.** Curiosity's REMS wind sensor has returned no data for years, so wind is not in the CSV,
 the telemetry, or Unity's `TelemetryMessage`. Don't show a wind reading on the HUD.

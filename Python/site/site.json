@@ -1,0 +1,75 @@
+{
+  "name": "Curiosity at Mount Sharp, sol 4560",
+  "sol": 4560,
+  "earth_date": "2025-06-03",
+  "center_lat": -4.79984723,
+  "center_lon": 137.3835414,
+  "size_m": 2000.0,
+  "cell_m": 4.0,
+  "vertical_exaggeration": 1.0,
+  "layers": [
+    {
+      "name": "photo",
+      "file": "photo.jpg",
+      "label": "Photo",
+      "credit": "HiRISE colour mosaic of Gale (NASA/JPL/UArizona, USGS), 0.25 m"
+    },
+    {
+      "name": "slope",
+      "file": "slope.jpg",
+      "label": "Slope hazard",
+      "credit": "Slope from HiRISE terrain at 2 m: amber 15-20 deg caution, red 20+ deg no-go (limits borrowed from Artemis lunar EVA planning)"
+    },
+    {
+      "name": "thermal",
+      "file": "thermal.jpg",
+      "label": "Thermal inertia",
+      "credit": "THEMIS thermal inertia, 100 m pixels: blue 340 = finer/looser ground, red 440 = rockier (J m-2 K-1 s-1/2)"
+    }
+  ],
+  "sources": [
+    {
+      "what": "Curiosity position, sol 4560 (NASA/JPL MSL waypoints)",
+      "url": "https://mars.nasa.gov/mmgis-maps/MSL/Layers/json/MSL_waypoints.json"
+    },
+    {
+      "what": "Elevation: HiRISE terrain model DTEEC_019698_1750_019988_1750_U01 (1.01 m, NASA/JPL/UArizona, USGS)",
+      "url": "https://astrogeo-ard.s3-us-west-2.amazonaws.com/mars/mro/hirise/controlled/dtm/ESP_019698_1750_ESP_019988_1750/DTEEC_019698_1750_019988_1750_U01.tif"
+    },
+    {
+      "what": "Photo: HiRISE colour mosaic of Gale (NASA/JPL/UArizona, USGS), 0.25 m",
+      "url": "https://asc-pds-services.s3.us-west-2.amazonaws.com/mosaic/Mars/MSL/MSL_Gale_HiRISE-LRGB_78quads_sharp_cog.tif"
+    },
+    {
+      "what": "Thermal inertia: Mars Odyssey THEMIS mosaic (100 m, ASU, USGS)",
+      "url": "https://asc-astropedia.s3.us-west-2.amazonaws.com/Mars/Odyssey/THEMIS-Global-Thermal-Inertia-Mosaic/Quantitative-32-Bit/THEMIS_TI_Mosaic_Quant_30S120E_100mpp.cub"
+    }
+  ],
+  "grid_points": 501,
+  "tex_px": 2048,
+  "crs": "+proj=eqc +lat_ts=0 +lat_0=0 +lon_0=0 +x_0=0 +y_0=0 +R=3396190 +units=m +no_defs=True",
+  "bounds_map_m": [
+    8142367.861,
+    -285509.493,
+    8144367.861,
+    -283509.493
+  ],
+  "lat_range": [
+    -4.81671783,
+    -4.78297663
+  ],
+  "lon_range": [
+    137.3666708,
+    137.400412
+  ],
+  "elev_range_m": [
+    -3875.57,
+    -3377.89
+  ],
+  "dtm_shift_to_photo": {
+    "east_m": -34.18,
+    "north_m": 34.79,
+    "correlation": 0.728,
+    "matched_against": "https://astrogeo-ard.s3-us-west-2.amazonaws.com/mars/mro/hirise/controlled/dtm/ESP_019698_1750_ESP_019988_1750/ESP_019988_1750_RED_C_01_ORTHO.tif"
+  }
+}

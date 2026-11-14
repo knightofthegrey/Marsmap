@@ -54,9 +54,35 @@ public class StatusMessage
     public float dose_total_mGy;
 }
 
+// Sent by server.py right before the heightmap when it serves a Python/site/ folder.
+[Serializable]
+public class SiteLayer
+{
+    public string name;    // "photo" | "slope" | "thermal"; matches the TEXL message's layer name
+    public string label;   // short UI label
+    public string credit;  // credit / legend line
+}
+
+[Serializable]
+public class SiteMessage
+{
+    public int v;
+    public string type;
+    public string name;
+    public int sol;
+    public string earth_date;
+    public float center_lat;
+    public float center_lon;   // east-positive, 0..360
+    public float size_m;
+    public float vertical_exaggeration;
+    public SiteLayer[] layers;
+}
+
 /// <summary>
 /// WebSocket link to Python/server.py. Keeps reconnecting until the server is up.
 ///  - Binary "HMAP" messages (JMARS heightmap) go to Terraingen.ApplyHeightmap.
+///  - Binary "TEXL" messages (a named site image: photo, slope, thermal) and the "site" JSON
+///    message go to TerrainOverlay, which drapes the images over the terrain (L cycles them).
 ///  - JSON messages (telemetry, events, Earth notes, status from feeder.py) are parsed
 ///    and raised as typed C# events on the main thread.
 ///
@@ -78,8 +104,12 @@ public class PythonConnection : MonoBehaviour
     [SerializeField] private float reconnectDelaySeconds = 2f;
     [Tooltip("Log every incoming JSON message to the Console (telemetry arrives ~2x per second).")]
     [SerializeField] private bool logMessages = false;
+    [Tooltip("Use the vertical exaggeration the server's site.json asks for (1 = true scale) " +
+             "instead of Terraingen's own setting.")]
+    [SerializeField] private bool useSiteVerticalExaggeration = true;
 
     public event Action<bool> ConnectionChanged;
+    public event Action<SiteMessage> SiteReceived;
     public event Action<TelemetryMessage> TelemetryReceived;
     public event Action<EvaEventMessage> EventReceived;
     public event Action<EarthNoteMessage> EarthNoteReceived;
@@ -88,8 +118,10 @@ public class PythonConnection : MonoBehaviour
     public bool IsConnected => websocket != null && websocket.State == WebSocketState.Open;
     public TelemetryMessage LatestTelemetry { get; private set; }
     public StatusMessage LatestStatus { get; private set; }
+    public SiteMessage LatestSite { get; private set; }
 
     private WebSocket websocket;
+    private TerrainOverlay overlay;
     private bool running;
     private bool warnedUnreachable;
     private bool wasOpen;
@@ -198,6 +230,13 @@ public class PythonConnection : MonoBehaviour
             return;
         }
 
+        // Site images (photo / slope / thermal) are binary and start with "TEXL".
+        if (bytes.Length >= 4 && bytes[0] == 'T' && bytes[1] == 'E' && bytes[2] == 'X' && bytes[3] == 'L')
+        {
+            HandleLayerImage(bytes);
+            return;
+        }
+
         string json = Encoding.UTF8.GetString(bytes);
         if (logMessages) Debug.Log("[PythonConnection] " + json);
 
@@ -236,12 +275,70 @@ public class PythonConnection : MonoBehaviour
                 Debug.Log($"[PythonConnection] EVA {LatestStatus.state}");
                 StatusReceived?.Invoke(LatestStatus);
                 break;
+            case "site":
+                HandleSite(JsonUtility.FromJson<SiteMessage>(json));
+                break;
             case "welcome":
                 break;
             default:
                 if (!logMessages) Debug.Log("[PythonConnection] Unhandled message: " + json);
                 break;
         }
+    }
+
+    // Arrives right before the heightmap, so the exaggeration applies to that heightmap.
+    private void HandleSite(SiteMessage site)
+    {
+        if (site == null) return;
+        LatestSite = site;
+
+        if (terraingen == null) terraingen = FindAnyObjectByType<Terraingen>();
+        if (useSiteVerticalExaggeration && terraingen != null && site.vertical_exaggeration > 0f)
+            terraingen.verticalExaggeration = site.vertical_exaggeration;
+
+        int layerCount = site.layers != null ? site.layers.Length : 0;
+        Debug.Log($"[PythonConnection] Site \"{site.name}\": sol {site.sol} ({site.earth_date}), " +
+                  $"lat {site.center_lat:F5}, lon {site.center_lon:F5} E, {site.size_m:F0} m box, " +
+                  $"{layerCount} image layer(s), vertical x" +
+                  (terraingen != null ? terraingen.verticalExaggeration.ToString("0.##") : "?"));
+
+        GetOverlay().SetSite(site); // before the event, so a subscriber's exception can't skip it
+        SiteReceived?.Invoke(site);
+    }
+
+    // "TEXL" | int32 LE name length N | N bytes UTF-8 layer name | JPEG/PNG file bytes
+    private void HandleLayerImage(byte[] bytes)
+    {
+        const int header = 8;
+        if (bytes.Length < header)
+        {
+            Debug.LogWarning($"[PythonConnection] Ignored TEXL message: only {bytes.Length} bytes");
+            return;
+        }
+        int nameLength = bytes[4] | (bytes[5] << 8) | (bytes[6] << 16) | (bytes[7] << 24);
+        if (nameLength <= 0 || nameLength >= bytes.Length - header) // also needs >= 1 image byte
+        {
+            Debug.LogWarning($"[PythonConnection] Ignored TEXL message: name length {nameLength} " +
+                             $"in a {bytes.Length}-byte message");
+            return;
+        }
+
+        string layerName = Encoding.UTF8.GetString(bytes, header, nameLength);
+        int imageLength = bytes.Length - header - nameLength;
+        byte[] image = new byte[imageLength];
+        Buffer.BlockCopy(bytes, header + nameLength, image, 0, imageLength);
+        GetOverlay().AddLayerImage(layerName, image);
+    }
+
+    // Prefer one already in the scene, else put it next to the Terraingen, else on this object.
+    private TerrainOverlay GetOverlay()
+    {
+        if (overlay != null) return overlay;
+        overlay = FindAnyObjectByType<TerrainOverlay>();
+        if (overlay != null) return overlay;
+        if (terraingen == null) terraingen = FindAnyObjectByType<Terraingen>();
+        overlay = (terraingen != null ? terraingen.gameObject : gameObject).AddComponent<TerrainOverlay>();
+        return overlay;
     }
 
     /// <summary>Send a raw JSON string to the server. Dropped silently if not connected.</summary>

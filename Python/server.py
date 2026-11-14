@@ -7,14 +7,18 @@ Martian Map - WebSocket server.
 
 Two jobs:
   1. Terrain: when Unity sends {"type":"request_heightmap"}, reply with a binary
-     heightmap built from a JMARS pixel-export CSV (or a demo terrain).
+     heightmap built from a CSV of lat/lon/elevation points (a JMARS pixel export,
+     or the HiRISE site made by make_site.py), or a demo terrain. For a make_site.py
+     site (a site.json next to the CSV) the reply is, in this order:
+         "site" JSON text -> HMAP heightmap -> one TEXL image per map layer
   2. Live data: every client starts as a "viewer". A client that sends
      {"type":"hello","from":"feeder"} becomes a data source, and everything it
      sends is relayed to all viewers. Viewers that join late are sent the last
      status and the latest telemetry so the HUD fills in immediately.
 
 Usage:
-    python server.py                      # demo heightmap
+    python server.py                      # Python/site/terrain.csv if it exists, else demo
+    python server.py --demo               # demo heightmap (fake sine-wave hills)
     python server.py export.csv           # JMARS pixel export CSV, 513x513
     python server.py export.csv 1025      # custom resolution (2^n + 1)
     python server.py --host 0.0.0.0       # also accept other machines
@@ -22,6 +26,10 @@ Usage:
     python feeder.py --speed 80           # replays real RAD + REMS data
 
 Needs: .venv/bin/pip install -r Python/requirements.txt   (Windows: .venv\\Scripts\\pip ...)
+
+Site message (JSON text, only for a make_site.py site):
+    {"v":1, "type":"site", "name", "sol", "earth_date", "center_lat", "center_lon",
+     "size_m", "vertical_exaggeration", "layers":[{"name","label","credit"}, ...]}
 
 Heightmap binary message layout (little-endian):
     4 bytes   magic "HMAP"
@@ -31,6 +39,13 @@ Heightmap binary message layout (little-endian):
     float32   size X (m, east-west)
     float32   size Z (m, north-south)
     N*N uint16 heights, row 0 = south, last row = north
+
+Layer image binary message (little-endian), one per site.json layer, in that order:
+    4 bytes   magic "TEXL"
+    int32     L = byte length of the layer name
+    L bytes   layer name, UTF-8 ("photo", "slope", "thermal")
+    rest      the image file as-is (JPEG/PNG; top row = north, left column = west,
+              covering exactly the heightmap's area)
 """
 import os
 import sys
@@ -85,14 +100,24 @@ def load_jmars_csv(path, res):
                   if i not in (lat_i, lon_i) and "id" not in h)
 
     data = np.genfromtxt(path, delimiter=",", skip_header=1,
-                         usecols=(lat_i, lon_i, elev_i))
+                         usecols=(lat_i, lon_i, elev_i), ndmin=2)
     lat, lon, elev = data[:, 0], data[:, 1], data[:, 2]
+    bad = np.isnan(lat) | np.isnan(lon)
+    if bad.all():
+        sys.exit(f"{path}: no numeric latitude/longitude values found.")
+    if bad.any():
+        print(f"WARNING: skipping {bad.sum()} rows without a numeric latitude/longitude")
+        lat, lon, elev = lat[~bad], lon[~bad], elev[~bad]
 
     # Snap points to a regular grid. (Rounding lat/lon directly splits rows,
     # because floats like -4.55859375 sit right on a rounding tie.)
     def step(v):
-        d = np.diff(np.sort(v))
-        return np.median(d[d > 1e-4])  # exact pixel spacing, ignores float noise
+        d = np.diff(np.unique(v))
+        if d.size == 0:
+            sys.exit(f"{path}: every point has the same latitude or longitude; not a grid.")
+        # Grid spacing. Gaps far smaller than the biggest one are float noise between
+        # copies of the same row/column, so this works for 4 m (or 1 m) grids too.
+        return np.median(d[d > d.max() * 1e-3])
     dlat, dlon = step(lat), step(lon)
     r = np.rint((lat - lat.min()) / dlat).astype(int)
     c = np.rint((lon - lon.min()) / dlon).astype(int)
@@ -131,19 +156,76 @@ def build_message(grid, size_x, size_z):
     return header + raw.tobytes()
 
 
-def prepare_message(csv_path, res):
-    if csv_path:
-        if not os.path.isfile(csv_path):
-            sys.exit(f"CSV not found: {os.path.abspath(csv_path)}\n"
-                     "Paths are relative to the folder you run the command from.")
-        grid, sx, sz = load_jmars_csv(csv_path, res)
-    else:
-        print("No CSV given, using demo terrain")
-        grid, sx, sz = demo_heightmap(res)
-    return build_message(grid, sx, sz)
+SITE_CSV = Path(__file__).resolve().parent / "site" / "terrain.csv"  # made by make_site.py
 
 
-HEIGHTMAP_MESSAGE = None
+def load_site(csv_path):
+    """make_site.py writes site.json next to terrain.csv. Returns the "site" JSON message and
+    one TEXL message per layer image, or (None, []) for a plain JMARS CSV."""
+    path = Path(csv_path).resolve().parent / "site.json"
+    if not path.is_file():
+        return None, []
+    try:
+        site = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as e:
+        print(f"WARNING: can't read {path} ({e}); sending the heightmap only")
+        return None, []
+    layers, images = [], []
+    for layer in site.get("layers", []):
+        name, file = layer.get("name"), layer.get("file")
+        img = path.parent / str(file)
+        if not name or not file or not img.is_file():
+            print(f"WARNING: layer {name!r}: image {img} not found, skipped")
+            continue
+        data = img.read_bytes()
+        name_b = name.encode("utf-8")
+        images.append(b"TEXL" + struct.pack("<i", len(name_b)) + name_b + data)
+        layers.append({"name": name, "label": layer.get("label", name),
+                       "credit": layer.get("credit", "")})
+    msg = {"v": SCHEMA_VERSION, "type": "site", "name": site.get("name", ""),
+           "sol": site.get("sol"), "earth_date": site.get("earth_date", ""),
+           "center_lat": site.get("center_lat"), "center_lon": site.get("center_lon"),
+           "size_m": site.get("size_m"),
+           "vertical_exaggeration": site.get("vertical_exaggeration", 1.0),
+           "layers": layers}
+    print(f"Site: {msg['name']} ({msg['earth_date']}), layers: "
+          + (", ".join(f"{l['name']} {len(m) / 1e6:.2f} MB" for l, m in zip(layers, images))
+             or "none"))
+    return json.dumps(msg), images
+
+
+def prepare_messages(csv_path, res, demo=False):
+    """Everything sent in reply to request_heightmap, in sending order."""
+    if not csv_path and not demo:
+        if SITE_CSV.is_file():
+            csv_path = str(SITE_CSV)
+            print(f"No CSV given, using the HiRISE site from make_site.py: {csv_path}")
+        else:
+            print("No CSV given and no Python/site/terrain.csv (see make_site.py), using demo terrain")
+    if demo or not csv_path:
+        if demo:
+            print("--demo: using demo terrain")
+        return [build_message(*demo_heightmap(res))]
+    if not os.path.isfile(csv_path):
+        sys.exit(f"CSV not found: {os.path.abspath(csv_path)}\n"
+                 "Paths are relative to the folder you run the command from.")
+    site_msg, images = load_site(csv_path)
+    grid, sx, sz = load_jmars_csv(csv_path, res)
+    return ([site_msg] if site_msg else []) + [build_message(grid, sx, sz)] + images
+
+
+def describe_terrain(messages):
+    """e.g. 'site info + heightmap (0.53 MB) + 3 layer images (4.61 MB)'."""
+    texts = [m for m in messages if isinstance(m, str)]
+    hmap = [m for m in messages if isinstance(m, bytes) and m[:4] == b"HMAP"]
+    imgs = [m for m in messages if isinstance(m, bytes) and m[:4] == b"TEXL"]
+    parts = (["site info"] if texts else []) + [f"heightmap ({sum(map(len, hmap)) / 1e6:.2f} MB)"]
+    if imgs:
+        parts.append(f"{len(imgs)} layer images ({sum(map(len, imgs)) / 1e6:.2f} MB)")
+    return " + ".join(parts)
+
+
+TERRAIN_MESSAGES = []   # sent in this order on request_heightmap (str = text frame, bytes = binary)
 
 
 # ---- Live data relay (feeder -> Unity) -------------------------------------
@@ -191,8 +273,9 @@ async def handler(ws):
                 continue
 
             if kind == "request_heightmap":
-                await ws.send(HEIGHTMAP_MESSAGE)  # bytes -> binary frame
-                print(f"    sent heightmap to {peer} ({len(HEIGHTMAP_MESSAGE) / 1e6:.1f} MB)")
+                for m in TERRAIN_MESSAGES:  # str -> text frame, bytes -> binary frame
+                    await ws.send(m)
+                print(f"    sent {describe_terrain(TERRAIN_MESSAGES)} to {peer}")
                 continue
 
             if ws in feeders:
@@ -223,12 +306,16 @@ async def main(host, port):
 
 if __name__ == "__main__":
     ap = argparse.ArgumentParser(description="Martian Map WebSocket server (terrain + live data)")
-    ap.add_argument("csv", nargs="?", help="JMARS pixel export CSV (omit for demo terrain)")
+    ap.add_argument("csv", nargs="?",
+                    help="lat/lon/elevation CSV: a JMARS pixel export, or omit to use "
+                         "Python/site/terrain.csv from make_site.py (demo terrain if missing)")
     ap.add_argument("res", nargs="?", type=int, default=513, help="heightmap resolution, 2^n + 1")
+    ap.add_argument("--demo", action="store_true", help="use the fake demo terrain")
     ap.add_argument("--host", default="localhost")
     ap.add_argument("--port", type=int, default=8765)
     a = ap.parse_args()
-    HEIGHTMAP_MESSAGE = prepare_message(a.csv, a.res)
+    TERRAIN_MESSAGES = prepare_messages(a.csv, a.res, a.demo)
+    print(f"Terrain reply: {describe_terrain(TERRAIN_MESSAGES)}")
     try:
         asyncio.run(main(a.host, a.port))
     except KeyboardInterrupt:
