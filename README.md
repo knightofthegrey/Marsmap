@@ -51,7 +51,7 @@ What NASA suggests considering:
 - [NASA Worldview](https://worldview.earthdata.nasa.gov/): Earth satellite imagery explorer (for inspiration)
 - [Mars Perseverance raw images](https://mars.nasa.gov/mars2020/multimedia/raw-images/): over a million images from the rover
 
-### NASA data we plan to use
+### Additional NASA Data
 
 - [HiRISE terrain models and imagery](https://stac.astrogeology.usgs.gov/browser-dev/#/api/collections/mro_hirise_socet_dtms) (Mars Reconnaissance Orbiter, via USGS Astrogeology)
 - [THEMIS thermal inertia mosaics](https://astrogeology.usgs.gov/search/map/themis_thermal_inertia_mosaic_quantitative_30s060e_100mpp) (Mars Odyssey, via USGS Astrogeology)
