@@ -33,8 +33,8 @@ def describe(msg):
     """One short log line per message, so the console stays readable at 2 Hz."""
     t = msg.get("type")
     if t == "telemetry":
-        return (f"telemetry t={msg.get('t_eva_s')}s dose={msg.get('dose_total_mGy')}mGy "
-                f"T={msg.get('temp_c')}C wind={msg.get('wind_ms')}m/s")
+        return (f"telemetry t={msg.get('t_eva_s')}s lmst={msg.get('lmst_h')} "
+                f"dose={msg.get('dose_total_mGy')}mGy T={msg.get('temp_c')}C P={msg.get('pressure_pa')}Pa")
     return json.dumps(msg)
 
 

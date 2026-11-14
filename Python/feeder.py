@@ -9,9 +9,12 @@ Static map data (heightmap, photo, cost grid, stops) does NOT go over the
 socket - Unity loads those files at startup. The socket carries only what
 would be "live" on a real Marswalk.
 
-Inputs (you create these by hand from PDS data; see the example files):
-  sol_samples.csv : t_eva_min, dose_rate_uGy_per_h, temp_c, pressure_pa, wind_ms
-  events.json     : list of {"t_eva_min", "type", ...} scripted events
+Inputs:
+  sol_samples.csv : made by fetch_sol.py from real RAD + REMS data. Columns:
+                    t_eva_min, dose_rate_uGy_per_h (required), then any other numeric
+                    columns (lmst_h, temp_c, pressure_pa, ...) which are sent as-is.
+  sol_samples.meta.json : written next to the CSV by fetch_sol.py; supplies "source".
+  events.json     : list of {"t_eva_min", "type", ...} scripted events (hand-written)
 
 Usage:
   pip install -r requirements.txt
@@ -22,9 +25,11 @@ Message format (agree this with whoever owns the server and the Unity side;
 the Unity classes live in Assets/SourceFiles/Scripts/PythonConnection.cs):
   every message is JSON with "v" (schema version) and "type".
   hello     : {"v":1,"type":"hello","from":"feeder"}  (first message; marks this client as a data source)
-  telemetry : {"v":1,"type":"telemetry","t_eva_s":..,"dose_rate_uGy_h":..,
-               "dose_total_mGy":..,"temp_c":..,"pressure_pa":..,"wind_ms":..,
-               "source":"MSL RAD+REMS sol NNNN (replayed)"}
+  telemetry : {"v":1,"type":"telemetry","t_eva_s":..,"lmst_h":..,"dose_rate_uGy_h":..,
+               "dose_total_mGy":..,"temp_c":..,"pressure_pa":..,
+               "source":"MSL RAD+REMS sol NNNN (YYYY-MM-DD), replayed"}
+              lmst_h = Mars local mean solar time in hours (10.5 = 10:30).
+              No wind: Curiosity's wind sensor has no data for these sols.
   event     : {"v":1,"type":"event","t_eva_s":..,"id":"dust_gust",..}
   earth_note: {"v":1,"type":"earth_note","t_eva_s":..,"text":"..","delay_s":..}
   status    : {"v":1,"type":"status","state":"started"|"finished"}
@@ -33,11 +38,14 @@ import argparse
 import asyncio
 import csv
 import json
+import os
 import time
 
 import websockets
 
 SCHEMA_VERSION = 1
+# CSV column -> telemetry key, where they differ.
+RENAME = {"dose_rate_uGy_per_h": "dose_rate_uGy_h"}
 
 
 def load_samples(path):
@@ -78,16 +86,13 @@ async def run(url, samples, events, speed, tick_s, eva_min, source):
             rate = interp(samples, t_min, "dose_rate_uGy_per_h")
             dose_mGy += rate * ((t_min - last_t) / 60.0) / 1000.0  # uGy/h * h -> mGy
             last_t = t_min
-            await send({
-                "type": "telemetry",
-                "t_eva_s": round(t_min * 60, 1),
-                "dose_rate_uGy_h": round(rate, 2),
-                "dose_total_mGy": round(dose_mGy, 4),
-                "temp_c": round(interp(samples, t_min, "temp_c"), 1),
-                "pressure_pa": round(interp(samples, t_min, "pressure_pa"), 1),
-                "wind_ms": round(interp(samples, t_min, "wind_ms"), 1),
-                "source": source,
-            })
+            msg = {"type": "telemetry", "t_eva_s": round(t_min * 60, 1)}
+            for col in samples[0]:
+                if col != "t_eva_min":
+                    msg[RENAME.get(col, col)] = round(interp(samples, t_min, col), 3)
+            msg["dose_total_mGy"] = round(dose_mGy, 4)
+            msg["source"] = source
+            await send(msg)
             while pending and pending[0]["t_eva_min"] <= t_min:
                 ev = dict(pending.pop(0))
                 ev["t_eva_s"] = round(ev.pop("t_eva_min") * 60, 1)
@@ -105,9 +110,19 @@ def main():
     ap.add_argument("--speed", type=float, default=80.0, help="EVA minutes per real minute")
     ap.add_argument("--tick", type=float, default=0.5, help="seconds between telemetry messages")
     ap.add_argument("--eva-min", type=float, default=240.0, help="EVA length in minutes")
-    ap.add_argument("--source", default="MSL RAD+REMS (replayed); set the sol number here")
+    ap.add_argument("--source", help="data credit shown on the HUD (default: from <samples>.meta.json)")
     a = ap.parse_args()
     samples = load_samples(a.samples)
+    if "dose_rate_uGy_per_h" not in samples[0]:
+        raise SystemExit(f"{a.samples} needs a dose_rate_uGy_per_h column (run fetch_sol.py)")
+    if not a.source:
+        meta_path = os.path.splitext(a.samples)[0] + ".meta.json"
+        try:
+            with open(meta_path) as f:
+                a.source = json.load(f)["source"]
+        except (OSError, KeyError, ValueError):
+            a.source = "unknown source (no .meta.json next to the CSV)"
+    print(f"Data: {a.source}")
     with open(a.events) as f:
         events = json.load(f)
     try:

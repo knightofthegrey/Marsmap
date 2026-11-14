@@ -20,12 +20,13 @@ public class WsEnvelope
 public class TelemetryMessage
 {
     public float t_eva_s;
-    public float dose_rate_uGy_h;
-    public float dose_total_mGy;
-    public float temp_c;
-    public float pressure_pa;
-    public float wind_ms;
-    public string source;
+    public float lmst_h;           // Mars local time in hours (10.5 = 10:30)
+    public float dose_rate_uGy_h;  // RAD
+    public float dose_total_mGy;   // dose accumulated since EVA start
+    public float temp_c;           // REMS ambient air temperature
+    public float pressure_pa;      // REMS
+    public string source;          // data credit, e.g. "MSL RAD+REMS sol 4560 (2025-06-03), replayed"
+    // No wind: Curiosity's REMS wind sensor returns no data for these sols.
 }
 
 [Serializable]
