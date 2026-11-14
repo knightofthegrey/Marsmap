@@ -31,12 +31,13 @@ public class Terraingen : MonoBehaviour
             {
                 float xCoord = (float)x / width * scale + offsetX;
                 float yCoord = (float)y / height * scale + offsetY;
-                heights[x, y] = Mathf.PerlinNoise(xCoord, yCoord);
+                heights[y, x] = Mathf.PerlinNoise(xCoord, yCoord);
             }
         }
 
         terrainData.SetHeights(0, 0, heights);
         terrain.terrainData = terrainData;
+        terrain.Flush();
     }
 
     void PlacePlayer()
