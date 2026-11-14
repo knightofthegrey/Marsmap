@@ -1,0 +1,7 @@
+# Only for the map scripts: prep_terrain.py, raster_to_csv.py
+#   .venv/bin/pip install -r Python/requirements-maps.txt
+# Kept separate so a failed rasterio install can never block the server.
+-r requirements.txt
+rasterio
+pyproj
+pillow

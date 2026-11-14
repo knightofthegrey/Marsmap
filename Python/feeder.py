@@ -17,7 +17,7 @@ Inputs:
   events.json     : list of {"t_eva_min", "type", ...} scripted events (hand-written)
 
 Usage:
-  pip install -r requirements.txt
+  .venv/bin/pip install -r Python/requirements.txt   (once, from the Marsmap folder)
   python feeder.py --url ws://localhost:8765 --speed 80
     --speed 80 squeezes a 4-hour EVA into 3 minutes for the demo.
 
@@ -34,14 +34,33 @@ the Unity classes live in Assets/SourceFiles/Scripts/PythonConnection.cs):
   earth_note: {"v":1,"type":"earth_note","t_eva_s":..,"text":"..","delay_s":..}
   status    : {"v":1,"type":"status","state":"started"|"finished"}
 """
+import os
+import sys
+from pathlib import Path
+
+# If run with plain `python3`, re-launch with the project's .venv (same as server.py).
+_VENV_PY = Path(__file__).resolve().parent.parent / ".venv" / (
+    "Scripts/python.exe" if os.name == "nt" else "bin/python")
+if (sys.prefix == sys.base_prefix and _VENV_PY.exists()
+        and not os.environ.get("MARSMAP_VENV_RELAUNCH")):   # guard: never relaunch twice
+    os.environ["MARSMAP_VENV_RELAUNCH"] = "1"
+    if os.name == "nt":  # Windows execv doesn't replace the process or quote paths with spaces
+        import subprocess
+        sys.exit(subprocess.call([str(_VENV_PY), *sys.argv]))
+    os.execv(str(_VENV_PY), [str(_VENV_PY), *sys.argv])
+
 import argparse
 import asyncio
 import csv
 import json
-import os
 import time
 
-import websockets
+try:
+    import websockets
+except ModuleNotFoundError:
+    sys.exit("Missing library: websockets\n"
+             "    python3 -m venv .venv\n"
+             "    .venv/bin/pip install -r Python/requirements.txt")
 
 SCHEMA_VERSION = 1
 # CSV column -> telemetry key, where they differ.
@@ -105,8 +124,9 @@ async def run(url, samples, events, speed, tick_s, eva_min, source):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--url", default="ws://localhost:8765")
-    ap.add_argument("--samples", default="sol_samples.csv")
-    ap.add_argument("--events", default="events.json")
+    here = Path(__file__).resolve().parent  # defaults work from any folder
+    ap.add_argument("--samples", default=str(here / "sol_samples.csv"))
+    ap.add_argument("--events", default=str(here / "events.json"))
     ap.add_argument("--speed", type=float, default=80.0, help="EVA minutes per real minute")
     ap.add_argument("--tick", type=float, default=0.5, help="seconds between telemetry messages")
     ap.add_argument("--eva-min", type=float, default=240.0, help="EVA length in minutes")

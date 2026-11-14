@@ -1,15 +1,19 @@
 # Martian Map - Python side
 
 ```
-fetch_sol.py  -->  sol_samples.csv  -->  feeder.py  --ws-->  server.py  --ws-->  Unity (PythonConnection.cs)
-raster_to_csv.py / prep_terrain.py  -->  map files Unity loads at startup (not sent over the socket)
+fetch_sol.py --> sol_samples.csv --> feeder.py --ws--> server.py --ws--> Unity  PythonConnection.cs
+                                                          ^   |
+                                     JMARS export.csv ----+   +-- heightmap --> Terraingen.cs
+raster_to_csv.py / prep_terrain.py --> extra map layers (CSV / files), not sent over the socket
 ```
 
 | File | What it does |
 |---|---|
 | `fetch_sol.py` | Downloads one sol of real Curiosity RAD (radiation) + REMS (temperature, pressure) data from NASA PDS and writes `sol_samples.csv` + `sol_samples.meta.json` |
 | `feeder.py` | Replays `sol_samples.csv` and the scripted `events.json` onto the EVA clock, sends JSON to the server |
-| `server.py` | WebSocket hub on `ws://localhost:8765`. Relays everything the feeder sends to every Unity client; late joiners get the last status + telemetry |
+| `server.py` | WebSocket server on `ws://localhost:8765`, two jobs: (1) sends Unity the terrain heightmap from a JMARS CSV (or a demo terrain) when asked; (2) relays everything the feeder sends to every Unity client, and late joiners get the last status + telemetry |
+| `requirements.txt` | Server, feeder and `fetch_sol.py` (numpy, websockets) |
+| `requirements-maps.txt` | Adds rasterio, pyproj, pillow for `raster_to_csv.py` and `prep_terrain.py` only |
 | `raster_to_csv.py` | Any map raster (GeoTIFF / ISIS cube, local or URL) -> CSV grid over a 2 km box: thermal inertia, elevation, or slope with ok / caution / no-go classes |
 | `prep_terrain.py` | HiRISE terrain model + photo -> Unity heightmap, photo, slope, route-cost grid, meta.json |
 | `sol_samples.csv` | **Real data**: sol 4560 (2025-06-03), 09:00-13:00 Mars local time. Regenerate with `fetch_sol.py` |
@@ -18,17 +22,28 @@ raster_to_csv.py / prep_terrain.py  -->  map files Unity loads at startup (not s
 
 ## Run the demo
 
+One-time setup, from the Marsmap folder:
+
 ```
-cd Python
-pip install -r requirements.txt
-python server.py                              # terminal 1
-python feeder.py --speed 80                   # terminal 2: 4-hour EVA in 3 minutes
+python3 -m venv .venv
+.venv/bin/pip install -r Python/requirements.txt
+.venv/bin/pip install -r Python/requirements-maps.txt   # only if you run the map scripts
 ```
 
-Press Play in Unity at any point. `PythonConnection` creates itself if it isn't in the scene,
-retries every 2 s until the server is up, and logs events / Earth notes to the Console.
-Tick **Log Messages** on the component to see every message. For a quick test run use
-`python feeder.py --speed 3600 --tick 0.05` (4 seconds).
+Then (plain `python3` is fine: `server.py` and `feeder.py` re-launch themselves with `.venv`):
+
+```
+python3 Python/server.py                      # terminal 1, demo terrain
+python3 Python/server.py export.csv 1025      #   ...or real terrain from a JMARS pixel export
+python3 Python/feeder.py --speed 80           # terminal 2: 4-hour EVA in 3 minutes
+```
+
+The feeder finds `sol_samples.csv` and `events.json` next to itself, whatever folder you run it from.
+
+Press Play in Unity at any point. `PythonConnection` retries every 2 s until the server is up,
+asks for the heightmap once (Terraingen falls back to Perlin terrain if none arrives in 5 s), and
+logs events / Earth notes to the Console. Tick **Log Messages** on the component to see every
+message. For a quick test run use `--speed 3600 --tick 0.05` (4 seconds).
 
 ## Data sources
 
@@ -49,7 +64,7 @@ The boxwork era starts around sol 4534.
 ### Real weather and radiation for another sol
 
 ```
-python fetch_sol.py --sol 4560 --start-lmst 9:00 --eva-min 240
+python3 Python/fetch_sol.py --sol 4560 --start-lmst 9:00 --eva-min 240   # standard library only
 ```
 
 Takes about a minute. RAD files are ~70 MB per sol, so the script downloads only the bytes it needs.
@@ -57,18 +72,19 @@ It warns if the window has long gaps between real readings.
 
 ### Map layers as CSV
 
-Use the same box for every layer so they line up with each other and with the terrain:
+Use the same box for every layer so they line up with each other and with the terrain.
+These need `requirements-maps.txt` installed, and run with the venv's Python from the Marsmap folder:
 
 ```
 # Thermal inertia around Gale (100 m cells -> 20 x 20 grid)
-python raster_to_csv.py --src https://asc-astropedia.s3.us-west-2.amazonaws.com/Mars/Odyssey/THEMIS-Global-Thermal-Inertia-Mosaic/Quantitative-32-Bit/THEMIS_TI_Mosaic_Quant_30S120E_100mpp.cub \
+.venv/bin/python Python/raster_to_csv.py --src https://asc-astropedia.s3.us-west-2.amazonaws.com/Mars/Odyssey/THEMIS-Global-Thermal-Inertia-Mosaic/Quantitative-32-Bit/THEMIS_TI_Mosaic_Quant_30S120E_100mpp.cub \
     --center-lat -4.75 --center-lon 137.4 --cell-m 100 --name thermal_inertia --out thermal_inertia.csv
 
 # Slope with ok / caution / no_go classes from a HiRISE terrain model (10 m cells -> 200 x 200)
-python raster_to_csv.py --src <DTM url> --center-lat -4.75 --center-lon 137.4 --cell-m 10 --slope --out slope.csv
+.venv/bin/python Python/raster_to_csv.py --src <DTM url> --center-lat -4.75 --center-lon 137.4 --cell-m 10 --slope --out slope.csv
 
 # Elevation from the same terrain model
-python raster_to_csv.py --src <DTM url> --center-lat -4.75 --center-lon 137.4 --cell-m 10 --name elev_m --out elevation.csv
+.venv/bin/python Python/raster_to_csv.py --src <DTM url> --center-lat -4.75 --center-lon 137.4 --cell-m 10 --name elev_m --out elevation.csv
 ```
 
 CSV columns: `row, col` (row 0 = north), `east_m, north_m` (metres from the box's south-west corner,

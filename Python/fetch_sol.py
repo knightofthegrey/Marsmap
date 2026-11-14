@@ -24,6 +24,7 @@ import argparse
 import csv
 import io
 import json
+import os
 import re
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
@@ -177,7 +178,8 @@ def main():
     ap.add_argument("--step-min", type=float, default=5, help="CSV row spacing in EVA minutes")
     ap.add_argument("--detector", choices=["B", "E"], default="E",
                     help="RAD detector: E (plastic, closer to human tissue) or B (silicon)")
-    ap.add_argument("--out", default="sol_samples.csv")
+    ap.add_argument("--out", default=os.path.join(os.path.dirname(os.path.abspath(__file__)), "sol_samples.csv"),
+                    help="default: sol_samples.csv next to this script, where feeder.py looks")
     a = ap.parse_args()
     hh, mm = a.start_lmst.split(":")
     start_h = int(hh) + int(mm) / 60

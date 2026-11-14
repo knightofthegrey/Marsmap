@@ -169,5 +169,7 @@ Packages/packages-lock.json linguist-generated
 
 # Exceptions for .asset files such as lightning pre-baking
 LightingData.asset     binary
+
+# Terrain Asset
 # Unity saves TerrainData as binary even in Force Text mode; eol=lf above would corrupt it
 *Terrain*.asset        binary

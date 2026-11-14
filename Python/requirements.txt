@@ -1,7 +1,7 @@
-# server.py + feeder.py
-websockets>=13
-# prep_terrain.py only
-rasterio
-numpy
-pillow
-pyproj
+# server.py, feeder.py, fetch_sol.py
+#   python3 -m venv .venv
+#   .venv/bin/pip install -r Python/requirements.txt        (Windows: .venv\Scripts\pip ...)
+# Minimum versions, not exact pins, so any Python 3.10+ works (numpy 2.5 needs 3.12+).
+# Tested with numpy 2.5.4 + websockets 17.4 on Python 3.14.
+numpy>=1.26
+websockets>=14

@@ -55,23 +55,28 @@ public class StatusMessage
 }
 
 /// <summary>
-/// WebSocket link to Python/server.py. Keeps reconnecting until the server is up,
-/// parses each message and raises a typed C# event on the main thread.
+/// WebSocket link to Python/server.py. Keeps reconnecting until the server is up.
+///  - Binary "HMAP" messages (JMARS heightmap) go to Terraingen.ApplyHeightmap.
+///  - JSON messages (telemetry, events, Earth notes, status from feeder.py) are parsed
+///    and raised as typed C# events on the main thread.
 ///
 /// Other scripts use it like:
 ///   PythonConnection.Instance.TelemetryReceived += t => doseText.text = $"{t.dose_total_mGy:F3} mGy";
 ///
-/// If no PythonConnection is in the scene, one is created automatically at startup.
+/// Terraingen adds this component if it isn't in the scene; if there is no Terraingen
+/// either, one is created automatically at startup.
 /// </summary>
 public class PythonConnection : MonoBehaviour
 {
     public const int SchemaVersion = 1;
+    const int HeightmapHeaderSize = 24; // "HMAP" + int32 res + 4 floats (see server.py)
 
     public static PythonConnection Instance { get; private set; }
 
-    [SerializeField] private string url = "ws://localhost:8765";
+    [SerializeField] private string url = "ws://127.0.0.1:8765";
+    [SerializeField] private Terraingen terraingen; // optional: found automatically
     [SerializeField] private float reconnectDelaySeconds = 2f;
-    [Tooltip("Log every incoming message to the Console (telemetry arrives ~2x per second).")]
+    [Tooltip("Log every incoming JSON message to the Console (telemetry arrives ~2x per second).")]
     [SerializeField] private bool logMessages = false;
 
     public event Action<bool> ConnectionChanged;
@@ -97,7 +102,11 @@ public class PythonConnection : MonoBehaviour
     private static void EnsureExists()
     {
         if (FindAnyObjectByType<PythonConnection>() != null) return;
-        new GameObject(nameof(PythonConnection)).AddComponent<PythonConnection>();
+        // Our own object, so it is safe to keep it alive across scene loads. When Terraingen
+        // adds this component to the Terrain instead, that object is left alone.
+        var go = new GameObject(nameof(PythonConnection));
+        DontDestroyOnLoad(go);
+        go.AddComponent<PythonConnection>();
     }
 
     private void Awake()
@@ -108,11 +117,13 @@ public class PythonConnection : MonoBehaviour
             return;
         }
         Instance = this;
-        if (transform.parent == null) DontDestroyOnLoad(gameObject);
     }
 
     private async void Start()
     {
+        if (terraingen == null) terraingen = FindAnyObjectByType<Terraingen>();
+        Debug.Log($"[PythonConnection] Connecting to {url}");
+
         running = true;
         while (running)
         {
@@ -136,6 +147,11 @@ public class PythonConnection : MonoBehaviour
         wasOpen = true;
         Debug.Log($"[PythonConnection] Connected to {url}");
         SendJson($"{{\"v\":{SchemaVersion},\"type\":\"hello\",\"from\":\"unity\"}}");
+        // Only while Terraingen is still waiting: respects its "Connect To Python" toggle, and
+        // once the heightmap or the Perlin fallback is in, a reconnect never rebuilds the
+        // terrain (or moves the player) mid-demo.
+        if (terraingen != null && terraingen.WaitingForHeightmap)
+            SendJson("{\"type\":\"request_heightmap\"}");
         ConnectionChanged?.Invoke(true);
     }
 
@@ -157,6 +173,31 @@ public class PythonConnection : MonoBehaviour
 
     private void HandleMessage(byte[] bytes)
     {
+        // Never let an exception escape into NativeWebSocket: its dispatcher stops delivering
+        // ALL later messages on this connection if one handler throws (bad heightmap size,
+        // a HUD script's bug, ...). Log it and keep the telemetry flowing.
+        try
+        {
+            DispatchMessage(bytes);
+        }
+        catch (Exception e)
+        {
+            Debug.LogException(e, this);
+        }
+    }
+
+    private void DispatchMessage(byte[] bytes)
+    {
+        // Heightmap messages are binary and start with the magic bytes "HMAP".
+        if (bytes.Length > HeightmapHeaderSize && bytes[0] == 'H' && bytes[1] == 'M'
+            && bytes[2] == 'A' && bytes[3] == 'P')
+        {
+            if (terraingen == null) terraingen = FindAnyObjectByType<Terraingen>();
+            if (terraingen != null) terraingen.ApplyHeightmap(bytes);
+            else Debug.LogError("[PythonConnection] Got a heightmap but there is no Terraingen in the scene");
+            return;
+        }
+
         string json = Encoding.UTF8.GetString(bytes);
         if (logMessages) Debug.Log("[PythonConnection] " + json);
 
