@@ -310,7 +310,7 @@ public class Terraingen : MonoBehaviour
 
         Vector3 pos = player.position;
         float terrainHeight = terrain.SampleHeight(pos) + terrain.transform.position.y;
-        pos.y = terrainHeight + PlayerBottomOffset() + 0.1f; // capsule bottom just above ground
+        pos.y = terrainHeight + PlayerBottomOffset() + 0.5f; // capsule bottom just above ground
         SetPlayerPosition(pos);
 
         if (!player.gameObject.activeSelf) player.gameObject.SetActive(true);

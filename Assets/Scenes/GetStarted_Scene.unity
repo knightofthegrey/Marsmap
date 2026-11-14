@@ -132,7 +132,6 @@ GameObject:
   - component: {fileID: 102397991}
   - component: {fileID: 102397992}
   - component: {fileID: 102397993}
-  - component: {fileID: 102397994}
   m_Layer: 0
   m_Name: Player
   m_TagString: Untagged
@@ -163,7 +162,7 @@ CharacterController:
   m_SlopeLimit: 45
   m_StepOffset: 0.3
   m_SkinWidth: 0.08
-  m_MinMoveDistance: 0.001
+  m_MinMoveDistance: 0
   m_Center: {x: 0, y: 0, z: 0}
 --- !u!4 &102397990
 Transform:
@@ -197,26 +196,6 @@ MonoBehaviour:
   jumpHeight: 1.5
   gravity: -3.72
   panTiltCamera: {fileID: 1135449529}
-  moveAction:
-    m_Name: Move
-    m_Type: 0
-    m_ExpectedControlType: 
-    m_Id: 2a78e631-a5d9-49f6-bc0a-4cce8d499e09
-    m_Processors: 
-    m_Interactions: 
-    m_SingletonActionBindings: []
-    m_Flags: 0
-    m_Priority: 0
-  jumpAction:
-    m_Name: Jump
-    m_Type: 0
-    m_ExpectedControlType: 
-    m_Id: 97ed4446-ff1b-4e6b-a4b9-08ecf4b8e825
-    m_Processors: 
-    m_Interactions: 
-    m_SingletonActionBindings: []
-    m_Flags: 0
-    m_Priority: 0
 --- !u!114 &102397992
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -224,7 +203,7 @@ MonoBehaviour:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 102397988}
-  m_Enabled: 1
+  m_Enabled: 0
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 7df5a058fbf4d8d43a66056107856b81, type: 3}
   m_Name: 
@@ -245,29 +224,6 @@ MonoBehaviour:
   targetTransform: {fileID: 102397990}
   angleText: {fileID: 0}
   coordinates: {fileID: 0}
---- !u!136 &102397994
-CapsuleCollider:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 102397988}
-  m_Material: {fileID: 0}
-  m_IncludeLayers:
-    serializedVersion: 2
-    m_Bits: 0
-  m_ExcludeLayers:
-    serializedVersion: 2
-    m_Bits: 0
-  m_LayerOverridePriority: 0
-  m_IsTrigger: 0
-  m_ProvidesContacts: 0
-  m_Enabled: 0
-  serializedVersion: 2
-  m_Radius: 0.5
-  m_Height: 1
-  m_Direction: 1
-  m_Center: {x: 0, y: 0, z: 0}
 --- !u!1 &372164341
 GameObject:
   m_ObjectHideFlags: 0
@@ -377,7 +333,24 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::Terraingen
   player: {fileID: 102397990}
   terrain: {fileID: 372164343}
+  connectToPython: 1
+  waitForPythonSeconds: 5
+  freezePlayerUntilReady: 1
+  centerPlayerOnNewTerrain: 1
+  keepPlayerAboveTerrain: 1
+  recenterTerrainAtOrigin: 1
+  verticalExaggeration: 5
+  terrainMaterial: {fileID: 0}
+  gradient:
+  - {r: 0.2, g: 0.1, b: 0.07, a: 1}
+  - {r: 0.5, g: 0.22, b: 0.12, a: 1}
+  - {r: 0.75, g: 0.45, b: 0.25, a: 1}
+  - {r: 0.92, g: 0.8, b: 0.62, a: 1}
+  cameraFarClip: 20000
+  perlinResolution: 513
+  perlinSize: {x: 1000, y: 100, z: 1000}
   scale: 5
+  logPlayerHeight: 0
 --- !u!1 &689238133
 GameObject:
   m_ObjectHideFlags: 0
@@ -622,7 +595,7 @@ Transform:
   m_GameObject: {fileID: 871577455}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 1811.131, y: 1267.7915, z: 1811.1311}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children:
@@ -979,7 +952,7 @@ Transform:
   m_GameObject: {fileID: 1135449524}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 1811.131, y: 1267.7915, z: 1811.1311}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
   m_LocalScale: {x: 1.9877812, y: 0.62420046, z: 0.0143466005}
   m_ConstrainProportionsScale: 0
   m_Children: []
