@@ -1,0 +1,5 @@
+[
+  {"t_eva_min": 45, "type": "earth_note", "text": "Science team: image the vein at Stop 2 before sampling.", "delay_s": 840},
+  {"t_eva_min": 150, "type": "event", "id": "dust_gust", "severity": "caution", "text": "Dust gust, visibility dropping. Consider heading home early."},
+  {"t_eva_min": 190, "type": "event", "id": "nav_degraded", "severity": "warning", "text": "Navigation degraded: use landmarks and the home bearing."}
+]

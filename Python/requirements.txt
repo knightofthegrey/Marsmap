@@ -1,0 +1,7 @@
+# server.py + feeder.py
+websockets>=13
+# prep_terrain.py only
+rasterio
+numpy
+pillow
+pyproj
