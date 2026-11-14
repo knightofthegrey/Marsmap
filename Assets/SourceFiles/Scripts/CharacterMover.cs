@@ -1,3 +1,4 @@
+using Unity.Cinemachine;
 using Unity.Collections.Tests.CoreCLR.TestJobs;
 using UnityEngine;
 using UnityEngine.InputSystem;
@@ -6,95 +7,69 @@ using UnityEngine.InputSystem;
 public class CharacterMover : MonoBehaviour
 {
     [Header("Movement Settings")]
-    public float walkSpeed = 5.0f;
-    public float sprintSpeed = 9.0f;
+    public float moveSpeed = 5.0f;
     public float jumpHeight = 1.5f;
-    public float gravity = -19.62f;
+    public float gravity = -7.42f;
 
     [Header("Look Settings")]
-    public Transform playerCamera;
-    public float mouseSensitivity = 0.15f;
-    public float maxLookAngle = 85.0f;
-
-    [Header("Input Actions")]
-    public InputAction moveAction;
-    public InputAction lookAction;
-    public InputAction jumpAction;
-    public InputAction sprintAction;
+    [SerializeField] private CinemachinePanTilt panTiltCamera;
+    [SerializeField] private InputAction moveAction;
+    [SerializeField] private InputAction jumpAction;
 
     private CharacterController controller;
-    private Vector3 velocity;
-    private float xRotation = 0f;
+    private Vector3 verticalVelocity;
+
+    private void Awake()
+    {
+        controller = GetComponent<CharacterController>();
+        Cursor.lockState = CursorLockMode.Locked;
+        Cursor.visible = false;
+    }
 
     private void OnEnable()
     {
         moveAction.Enable();
-        lookAction.Enable();
         jumpAction.Enable();
-        sprintAction.Enable();
     }
 
     private void OnDisable()
     {
         moveAction.Disable();
-        lookAction.Disable();
         jumpAction.Disable();
-        sprintAction.Disable();
-    }
-
-    void Start()
-    {
-        controller = GetComponent<CharacterController>();
-
-        Cursor.lockState = CursorLockMode.Locked;
-        Cursor.visible = false;
     }
 
     void Update()
     {
-        HandleLook();
         HandleMovement();
-    }
-
-    private void HandleLook()
-    {
-        // Read mouse delta or stick input
-        Vector2 lookInput = lookAction.ReadValue<Vector2>();
-        float mouseX = lookInput.x * mouseSensitivity;
-        float mouseY = lookInput.y * mouseSensitivity;
-
-        // Rotate camera vertically and clamp
-        xRotation -= mouseY;
-        xRotation = Mathf.Clamp(xRotation, -maxLookAngle, maxLookAngle);
-        playerCamera.localRotation = Quaternion.Euler(xRotation, 0f, 0f);
-
-        // Rotate player horizontally
-        transform.Rotate(Vector3.up * mouseX);
+        HandleVertical();
     }
 
     private void HandleMovement()
     {
-        if (controller.isGrounded && velocity.y < 0)
+        Vector2 input = moveAction.ReadValue<Vector2>();
+
+        // Align player yaw with the Cinemachine Pan angle
+        float yaw = panTiltCamera.PanAxis.Value;
+        Quaternion yawRotation = Quaternion.Euler(0f, yaw, 0f);
+        transform.rotation = yawRotation;
+
+        // Calculate world-space movement relative to look direction
+        Vector3 moveDirection = yawRotation * new Vector3(input.x, 0f, input.y);
+        controller.Move(moveDirection * (moveSpeed * Time.deltaTime));
+    }
+    private void HandleVertical()
+    {
+        if (controller.isGrounded && verticalVelocity.y < 0f)
         {
-            velocity.y = -2f;
+            verticalVelocity.y = -2f;
         }
 
-        // Read 2D movement vector
-        Vector2 moveInput = moveAction.ReadValue<Vector2>();
-
-        // Check if sprint button is held
-        float currentSpeed = sprintAction.IsPressed() ? sprintSpeed : walkSpeed;
-
-        Vector3 move = transform.right * moveInput.x + transform.forward * moveInput.y;
-        controller.Move(move.normalized * currentSpeed * Time.deltaTime);
-
-        // Check if jump was triggered this frame
         if (jumpAction.WasPressedThisFrame() && controller.isGrounded)
         {
-            velocity.y = Mathf.Sqrt(jumpHeight * -2f * gravity);
+            verticalVelocity.y = Mathf.Sqrt(jumpHeight * -2f * gravity);
         }
 
-        velocity.y += gravity * Time.deltaTime;
-        controller.Move(velocity * Time.deltaTime);
+        verticalVelocity.y += gravity * Time.deltaTime;
+        controller.Move(verticalVelocity * Time.deltaTime);
     }
 }

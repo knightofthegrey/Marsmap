@@ -2,17 +2,22 @@ using UnityEngine;
 
 public class Terraingen : MonoBehaviour
 {
+    public Transform player;
+    public Terrain terrain;
     
     public float scale = 20f;
     [ContextMenu("Test Terraingen")]
-    void Start()
+    async void Start()
     {
-        Terrain terrain = GetComponent<Terrain>();
-        terrain.terrainData = GenerateTerrain(terrain.terrainData);
+        await GenerateTerrain();
+
+        PlacePlayer();
     }
 
-    TerrainData GenerateTerrain(TerrainData terrainData)
+    async Awaitable GenerateTerrain()
     {
+        TerrainData terrainData = terrain.terrainData;
+
         int width = terrainData.heightmapResolution;
         int height = terrainData.heightmapResolution;
         float[,] heights = new float[width, height];
@@ -31,6 +36,23 @@ public class Terraingen : MonoBehaviour
         }
 
         terrainData.SetHeights(0, 0, heights);
-        return terrainData;
+        terrain.terrainData = terrainData;
+    }
+
+    void PlacePlayer()
+    {
+        if (player == null || terrain == null) return;
+
+        Vector3 pos = player.position;
+        float terrainHeight = terrain.SampleHeight(pos) + terrain.transform.position.y;
+        pos.y = terrainHeight + 0.1f; // Slight buffer so feet don't clip
+
+        // Safely move a CharacterController if one is attached
+        CharacterController cc = player.GetComponent<CharacterController>();
+        if (cc != null) cc.enabled = false;
+
+        player.position = pos;
+
+        if (cc != null) cc.enabled = true;
     }
 }
