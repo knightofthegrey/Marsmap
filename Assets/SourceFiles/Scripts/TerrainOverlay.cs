@@ -280,7 +280,8 @@ public class TerrainOverlay : MonoBehaviour
         float inner = Mathf.Min(Mathf.Max(titleSize.x, creditWidth), maxInner);
         float creditHeight = creditWidth > 0f ? creditStyle.CalcHeight(creditContent, inner) : 0f;
 
-        var box = new Rect(margin, Screen.height - margin - titleSize.y - creditHeight - 2f * pad,
+        // Sits above the minimap (Minimap.cs) when there is one
+        var box = new Rect(margin, Screen.height - margin - Minimap.BottomLeftHeight - titleSize.y - creditHeight - 2f * pad,
                            inner + 2f * pad, titleSize.y + creditHeight + 2f * pad);
         Color previous = GUI.color;
         GUI.color = new Color(0f, 0f, 0f, 0.65f);
