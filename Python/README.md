@@ -12,7 +12,7 @@ raster_to_csv.py / prep_terrain.py --> extra map layers (CSV / files), not sent 
 |---|---|
 | `fetch_sol.py` | Downloads one sol of real Curiosity RAD (radiation) + REMS (temperature, pressure) data from NASA PDS and writes `sol_samples.csv` + `sol_samples.meta.json` |
 | `feeder.py` | Replays `sol_samples.csv` and the scripted `events.json` onto the EVA clock, sends JSON to the server |
-| `server.py` | WebSocket server on `ws://localhost:8765`, two jobs: (1) sends Unity the terrain when asked: `site/` if it exists, else a JMARS CSV you name, else a demo terrain; (2) relays everything the feeder sends to every Unity client, and late joiners get the last status + telemetry |
+| `server.py` | WebSocket server on `ws://localhost:8765`, two jobs: (1) sends Unity the terrain when asked: Gale crater by default (`DEFAULT_POLYGON`, 12 seamless tiles), or `--site`, a `--polygon`, a JMARS CSV, or `--demo`; (2) relays everything the feeder sends to every Unity client, and late joiners get the last status + telemetry |
 | `make_site.py` | **Real terrain**: HiRISE terrain model + colour photo + slope + thermal inertia around Curiosity's sol-4560 position -> `site/` |
 | `site/` | Made by `make_site.py`: `terrain.csv`, `photo.jpg`, `slope.jpg`, `thermal.jpg`, `site.json` (about 13 MB) |
 | `requirements.txt` | Server, feeder and `fetch_sol.py` (numpy, websockets) |
@@ -36,7 +36,8 @@ python3 -m venv .venv
 Then (plain `python3` is fine: `server.py` and `feeder.py` re-launch themselves with `.venv`):
 
 ```
-python3 Python/server.py                      # terminal 1: real terrain from Python/site/ (demo if it's missing)
+python3 Python/server.py                      # terminal 1: Gale crater (12 tiles; instant if the cached tiles are in Python/imagery_cache/)
+python3 Python/server.py --site               #   ...or the Curiosity HiRISE site in Python/site/
 python3 Python/server.py --demo               #   ...or the fake demo terrain
 python3 Python/server.py export.csv 1025      #   ...or a JMARS pixel export
 python3 Python/feeder.py                      # terminal 2: 4-hour EVA in 48 s (demo pace)
@@ -76,7 +77,7 @@ radiation replay. It writes `Python/site/`:
 ```
 .venv/bin/pip install -r Python/requirements-maps.txt   # once
 .venv/bin/python Python/make_site.py                     # ~20 s, downloads only the box (tens of MB)
-python3 Python/server.py                                 # picks up Python/site/ automatically
+python3 Python/server.py --site                          # serves Python/site/
 ```
 
 When Unity asks for the terrain, the server sends the site info, then the heightmap, then the three

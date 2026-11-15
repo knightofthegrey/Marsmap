@@ -82,6 +82,8 @@ public class SiteMessage
 /// <summary>
 /// WebSocket link to Python/server.py. Keeps reconnecting until the server is up.
 ///  - Binary "HMAP" messages (JMARS heightmap) go to Terraingen.ApplyHeightmap.
+///  - Binary "TILE" / "TIMG" messages (a --polygon too big for one terrain, sent as a grid of
+///    tiles + their images) go to Terraingen.ApplyTile / ApplyTileImage.
 ///  - Binary "TEXL" messages (a named site image: photo, slope, thermal) and the "site" JSON
 ///    message go to TerrainOverlay, which drapes the images over the terrain (L cycles them).
 ///  - JSON messages (telemetry, events, Earth notes, status from feeder.py) are parsed
@@ -228,6 +230,18 @@ public class PythonConnection : MonoBehaviour
             if (terraingen == null) terraingen = FindAnyObjectByType<Terraingen>();
             if (terraingen != null) terraingen.ApplyHeightmap(bytes);
             else Debug.LogError("[PythonConnection] Got a heightmap but there is no Terraingen in the scene");
+            return;
+        }
+
+        // Big --polygon areas: one "TILE" heightmap (+ "TIMG" image) per piece of a tile grid.
+        bool tile = bytes.Length > 44 && bytes[0] == 'T' && bytes[1] == 'I' && bytes[2] == 'L' && bytes[3] == 'E';
+        bool tileImage = bytes.Length > 12 && bytes[0] == 'T' && bytes[1] == 'I' && bytes[2] == 'M' && bytes[3] == 'G';
+        if (tile || tileImage)
+        {
+            if (terraingen == null) terraingen = FindAnyObjectByType<Terraingen>();
+            if (terraingen == null) Debug.LogError("[PythonConnection] Got a terrain tile but there is no Terraingen in the scene");
+            else if (tile) terraingen.ApplyTile(bytes);
+            else terraingen.ApplyTileImage(bytes);
             return;
         }
 
