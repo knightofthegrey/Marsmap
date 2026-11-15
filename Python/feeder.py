@@ -35,6 +35,14 @@ the Unity classes live in Assets/SourceFiles/Scripts/PythonConnection.cs):
   event     : {"v":1,"type":"event","t_eva_s":..,"id":"dust_gust",..}
   earth_note: {"v":1,"type":"earth_note","t_eva_s":..,"text":"..","delay_s":..}
   status    : {"v":1,"type":"status","state":"started"|"finished"}
+  alert     : {"v":1,"type":"alert","t_eva_s":..,"category":"dust"|"radiation"|"uv",
+               "level":"advisory"|"warning"|"danger"|"clear","title":..,"text":..,
+               "update":bool,"value":..,"eta_min":..}   (from alerts.py; see docs/ALERTS.md)
+  telemetry also carries the REMS UV bands (uv_*_wm2), the detector's estimates (uv_index,
+  dust_tau, pressure_anomaly_pa, dose_expected_uGy_h) and "scenario" (non-empty while a
+  scripted event in events.json is changing the data).
+
+  python feeder.py --timeline   prints every alert/event the replay will send (no server needed)
 """
 import os
 import sys
@@ -57,6 +65,8 @@ import csv
 import json
 import time
 
+from alerts import AlertDetector, Scenarios, interp
+
 try:
     import websockets
 except ModuleNotFoundError:
@@ -78,52 +88,78 @@ def load_samples(path):
     return rows
 
 
-def interp(rows, t_min, key):
-    """Linear interpolation of one column at EVA minute t_min."""
-    if t_min <= rows[0]["t_eva_min"]:
-        return rows[0][key]
-    for a, b in zip(rows, rows[1:]):
-        if a["t_eva_min"] <= t_min <= b["t_eva_min"]:
-            span = b["t_eva_min"] - a["t_eva_min"] or 1.0
-            w = (t_min - a["t_eva_min"]) / span
-            return a[key] + w * (b[key] - a[key])
-    return rows[-1][key]
+def timeline(samples, events, speed, tick_s, eva_min, source):
+    """Every message of the replay, in order, as [(t_eva_min, message dict), ...].
+    Deterministic, so the live replay and --timeline show exactly the same thing."""
+    scenarios = Scenarios(events)
+    detector = AlertDetector(samples)
+    pending = sorted((e for e in events if e.get("type") != "scenario"), key=lambda e: e["t_eva_min"])
+    out = [(0.0, {"type": "status", "state": "started", "speed": speed})]
+    step = tick_s * speed / 60.0               # EVA minutes per tick
+    dose_mGy, last_t, i = 0.0, 0.0, 0
+    while True:
+        t_min = min(i * step, eva_min)
+        row = {col: interp(samples, t_min, col) for col in samples[0] if col != "t_eva_min"}
+        row, active = scenarios.apply(t_min, row)
+        rate = row["dose_rate_uGy_per_h"]
+        dose_mGy += rate * ((t_min - last_t) / 60.0) / 1000.0  # uGy/h * h -> mGy
+        last_t = t_min
+        msg = {"type": "telemetry", "t_eva_s": round(t_min * 60, 1)}
+        for col, v in row.items():
+            msg[RENAME.get(col, col)] = round(v, 4 if col.startswith("uv_") else 3)
+        msg["dose_total_mGy"] = round(dose_mGy, 4)
+        msg["scenario"] = ",".join(active)        # non-empty = a scripted event is changing the data
+        msg["source"] = source
+        alerts = detector.update(msg)             # adds uv_index, dust_tau, ... to msg
+        out.append((t_min, msg))
+        out += [(t_min, a) for a in alerts]
+        while pending and pending[0]["t_eva_min"] <= t_min:
+            out.append((t_min, event_message(pending.pop(0), speed)))
+        if t_min >= eva_min:
+            break
+        i += 1
+    out.append((eva_min, {"type": "status", "state": "finished", "dose_total_mGy": round(dose_mGy, 4)}))
+    return out
 
 
-async def run(url, samples, events, speed, tick_s, eva_min, source):
+def event_message(ev, speed):
+    """events.json entry -> the message Unity gets. duration_min (EVA minutes) becomes
+    duration_s (real seconds at this replay speed), so effects last as long as the scenario."""
+    ev = dict(ev)
+    ev["t_eva_s"] = round(ev.pop("t_eva_min") * 60, 1)
+    if "duration_min" in ev:
+        ev["duration_s"] = round(ev.pop("duration_min") * 60.0 / speed, 1)
+    return ev
+
+
+def describe(t_min, msg, speed):
+    """One line for the console / --timeline."""
+    when = f"{t_min * 60 / speed:5.1f} s  (EVA {int(t_min) // 60}:{int(t_min) % 60:02d})"
+    if msg["type"] == "alert":
+        eta = f"  [storm ETA ~{msg['eta_min']} EVA min]" if "eta_min" in msg else ""
+        return f"{when}  ALERT {msg['category']:<9} {msg['level']:<8} {msg['title']}: {msg['text']}{eta}"
+    if msg["type"] == "event":
+        return f"{when}  EVENT {msg.get('id')}: {msg.get('text', '')}"
+    if msg["type"] == "earth_note":
+        return f"{when}  EARTH {msg.get('text', '')}"
+    return f"{when}  {msg['type'].upper()} {msg.get('state', '')}"
+
+
+async def run(url, messages, speed, eva_min):
     async with websockets.connect(url) as ws:
         send = lambda msg: ws.send(json.dumps({"v": SCHEMA_VERSION, **msg}))
         await send({"type": "hello", "from": "feeder"})
         print(f"Connected to {url}; replaying {eva_min:g} EVA minutes at {speed:g}x "
               f"(ends after {eva_min * 60 / speed:.0f} s)")
-        for e in sorted(events, key=lambda e: e["t_eva_min"]):
-            print(f"  at {e['t_eva_min'] * 60 / speed:5.1f} s: {e.get('id') or e['type']}")
-        await send({"type": "status", "state": "started", "speed": speed})
-        pending = sorted(events, key=lambda e: e["t_eva_min"])
-        dose_mGy = 0.0
         start = time.monotonic()
-        last_t = 0.0
-        while True:
-            t_min = (time.monotonic() - start) * speed / 60.0
-            if t_min > eva_min:
-                break
-            rate = interp(samples, t_min, "dose_rate_uGy_per_h")
-            dose_mGy += rate * ((t_min - last_t) / 60.0) / 1000.0  # uGy/h * h -> mGy
-            last_t = t_min
-            msg = {"type": "telemetry", "t_eva_s": round(t_min * 60, 1)}
-            for col in samples[0]:
-                if col != "t_eva_min":
-                    msg[RENAME.get(col, col)] = round(interp(samples, t_min, col), 3)
-            msg["dose_total_mGy"] = round(dose_mGy, 4)
-            msg["source"] = source
+        for t_min, msg in messages:
+            wait = start + t_min * 60.0 / speed - time.monotonic()
+            if wait > 0:
+                await asyncio.sleep(wait)
             await send(msg)
-            while pending and pending[0]["t_eva_min"] <= t_min:
-                ev = dict(pending.pop(0))
-                ev["t_eva_s"] = round(ev.pop("t_eva_min") * 60, 1)
-                await send(ev)
-            await asyncio.sleep(tick_s)
-        await send({"type": "status", "state": "finished", "dose_total_mGy": round(dose_mGy, 4)})
-        print(f"Finished. Total dose {dose_mGy:.4f} mGy")
+            if msg["type"] in ("alert", "event", "earth_note"):
+                print(describe(t_min, msg, speed))
+        print(f"Finished. Total dose {messages[-1][1].get('dose_total_mGy', 0):.4f} mGy")
 
 
 def main():
@@ -137,6 +173,8 @@ def main():
     ap.add_argument("--tick", type=float, default=0.5, help="seconds between telemetry messages")
     ap.add_argument("--eva-min", type=float, default=240.0, help="EVA length in minutes")
     ap.add_argument("--source", help="data credit shown on the HUD (default: from <samples>.meta.json)")
+    ap.add_argument("--timeline", action="store_true",
+                    help="print the events and alerts the replay will send, then exit (no server needed)")
     a = ap.parse_args()
     samples = load_samples(a.samples)
     if "dose_rate_uGy_per_h" not in samples[0]:
@@ -151,8 +189,14 @@ def main():
     print(f"Data: {a.source}")
     with open(a.events) as f:
         events = json.load(f)
+    messages = timeline(samples, events, a.speed, a.tick, a.eva_min, a.source)
+    if a.timeline:
+        for t_min, msg in messages:
+            if msg["type"] != "telemetry":
+                print(describe(t_min, msg, a.speed))
+        return
     try:
-        asyncio.run(run(a.url, samples, events, a.speed, a.tick, a.eva_min, a.source))
+        asyncio.run(run(a.url, messages, a.speed, a.eva_min))
     except OSError as e:
         raise SystemExit(f"Can't reach {a.url} ({e}). Is server.py running?")
     except KeyboardInterrupt:

@@ -27,6 +27,30 @@ public class TelemetryMessage
     public float pressure_pa;      // REMS
     public string source;          // data credit, e.g. "MSL RAD+REMS sol 4560 (2025-06-03), replayed"
     // No wind: Curiosity's REMS wind sensor returns no data for these sols.
+
+    // REMS UV sensor bands (W/m^2). 0 when the samples have no UV.
+    public float uv_a_wm2, uv_b_wm2, uv_c_wm2, uv_abc_wm2;
+
+    // Added by the alert detector (Python/alerts.py); estimates, not sensor readings.
+    public float uv_index;             // estimated UV index (WHO scale) from the UV bands
+    public float dust_tau;             // extra dust opacity, estimated from UV vs the sol's normal
+    public float pressure_anomaly_pa;  // pressure minus the sol's normal at this local time
+    public float dose_expected_uGy_h;  // the sol's normal dose rate at this local time
+    public string scenario;            // non-empty while a scripted event changes the data
+}
+
+/// <summary>An environment alert from Python/alerts.py. Level "clear" removes it.</summary>
+[Serializable]
+public class AlertMessage
+{
+    public float t_eva_s;
+    public string category;  // "dust" | "radiation" | "uv"
+    public string level;     // "advisory" | "warning" | "danger" | "clear"
+    public string title;     // e.g. "DUST WARNING"
+    public string text;
+    public bool update;      // same level, new details (no new sound)
+    public float value;      // the number behind it (opacity, uGy/h, UV index)
+    public float eta_min;    // dust warning: estimated arrival, EVA minutes after t_eva_s (0 = none)
 }
 
 [Serializable]
@@ -170,6 +194,7 @@ public class PythonConnection : MonoBehaviour
     public event Action<EarthNoteMessage> EarthNoteReceived;
     public event Action<StatusMessage> StatusReceived;
     public event Action<RouteMessage> RouteReceived;
+    public event Action<AlertMessage> AlertReceived;
 
     public bool IsConnected => websocket != null && websocket.State == WebSocketState.Open;
     public TelemetryMessage LatestTelemetry { get; private set; }
@@ -332,6 +357,11 @@ public class PythonConnection : MonoBehaviour
                 var ev = JsonUtility.FromJson<EvaEventMessage>(json);
                 Debug.Log($"[EVA {ev.severity}] {ev.text}");
                 EventReceived?.Invoke(ev);
+                break;
+            case "alert":
+                var alert = JsonUtility.FromJson<AlertMessage>(json);
+                if (!alert.update) Debug.Log($"[Alert {alert.category} {alert.level}] {alert.title}: {alert.text}");
+                AlertReceived?.Invoke(alert);
                 break;
             case "earth_note":
                 var note = JsonUtility.FromJson<EarthNoteMessage>(json);
