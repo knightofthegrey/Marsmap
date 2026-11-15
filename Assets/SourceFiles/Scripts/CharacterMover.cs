@@ -20,6 +20,9 @@ public class CharacterMover : MonoBehaviour
     [Tooltip("Left empty: Space")]
     [SerializeField] private InputAction jumpAction;
 
+    [Tooltip("Set by other scripts (e.g. the M map) to ignore walk/jump keys; gravity keeps working")]
+    public bool inputLocked;
+
     private CharacterController controller;
     private Vector3 verticalVelocity;
     private bool warnedNoCamera;
@@ -96,7 +99,7 @@ public class CharacterMover : MonoBehaviour
 
     private void HandleMovement()
     {
-        Vector2 input = moveAction.ReadValue<Vector2>();
+        Vector2 input = inputLocked ? Vector2.zero : moveAction.ReadValue<Vector2>();
 
         if (MarsmapInput.XRActive)
         {
@@ -149,7 +152,7 @@ public class CharacterMover : MonoBehaviour
             verticalVelocity.y = -2f;
         }
 
-        bool jumpAllowed = !MarsmapInput.XRActive || MarsmapConfig.AllowJumpInVR;
+        bool jumpAllowed = !inputLocked && (!MarsmapInput.XRActive || MarsmapConfig.AllowJumpInVR);
         if (jumpAllowed && jumpAction.WasPressedThisFrame() && controller.isGrounded)
         {
             verticalVelocity.y = Mathf.Sqrt(jumpHeight * -2f * gravity);

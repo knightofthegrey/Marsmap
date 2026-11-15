@@ -27,6 +27,30 @@ public class TelemetryMessage
     public float pressure_pa;      // REMS
     public string source;          // data credit, e.g. "MSL RAD+REMS sol 4560 (2025-06-03), replayed"
     // No wind: Curiosity's REMS wind sensor returns no data for these sols.
+
+    // REMS UV sensor bands (W/m^2). 0 when the samples have no UV.
+    public float uv_a_wm2, uv_b_wm2, uv_c_wm2, uv_abc_wm2;
+
+    // Added by the alert detector (Python/alerts.py); estimates, not sensor readings.
+    public float uv_index;             // estimated UV index (WHO scale) from the UV bands
+    public float dust_tau;             // extra dust opacity, estimated from UV vs the sol's normal
+    public float pressure_anomaly_pa;  // pressure minus the sol's normal at this local time
+    public float dose_expected_uGy_h;  // the sol's normal dose rate at this local time
+    public string scenario;            // non-empty while a scripted event changes the data
+}
+
+/// <summary>An environment alert from Python/alerts.py. Level "clear" removes it.</summary>
+[Serializable]
+public class AlertMessage
+{
+    public float t_eva_s;
+    public string category;  // "dust" | "radiation" | "uv"
+    public string level;     // "advisory" | "warning" | "danger" | "clear"
+    public string title;     // e.g. "DUST WARNING"
+    public string text;
+    public bool update;      // same level, new details (no new sound)
+    public float value;      // the number behind it (opacity, uGy/h, UV index)
+    public float eta_min;    // dust warning: estimated arrival, EVA minutes after t_eva_s (0 = none)
 }
 
 [Serializable]
@@ -62,6 +86,58 @@ public class SiteLayer
     public string name;    // "photo" | "slope" | "thermal"; matches the TEXL message's layer name
     public string label;   // short UI label
     public string credit;  // credit / legend line
+}
+
+[Serializable]
+public class RouteRequest
+{
+    public int v = PythonConnection.SchemaVersion;
+    public string type = "plan_route";
+    public int id;
+    public float[] x;      // Unity world metres; the first point is where the astronaut is
+    public float[] z;
+    public bool loop;      // come back to the first point
+    public bool return_to_start; // the last point is the route's start: only changes the wording
+}
+
+[Serializable]
+public class RouteLeg
+{
+    public string from_wp;   // "start", "1", "2", ...
+    public string to_wp;
+    public bool ok;          // false = no safe path on this leg
+    public float distance_m;
+    public float minutes;
+    public int start_index;  // this leg is points x[start_index..end_index] of the route
+    public int end_index;
+}
+
+// Reply to RouteRequest, planned by Python/route_planner.py (rules from Mars_mapping(3).ipynb)
+[Serializable]
+public class RouteMessage
+{
+    public int v;
+    public string type;
+    public int id;
+    public bool ok;
+    public string error;
+    public float[] x;        // route points, Unity world metres
+    public float[] z;
+    public float[] elev;     // real elevation (m)
+    public int[] tier;       // 0 optimal, 1 caution, 2 high risk, 3 impassable, 4 no safe path
+    public RouteLeg[] legs;
+    public float distance_m;
+    public float minutes;    // EVA time (Tobler's hiking function for Mars)
+    public float gain_m;
+    public float loss_m;
+    public float max_climb_deg;
+    public float max_descent_deg;
+    public float max_side_deg;
+    public string difficulty; // EASY / MODERATE / HARD
+    public float score;
+    public float[] zone_pct;  // share of the distance in each tier
+    public string[] hazards;
+    public float spacing_m;   // planning grid spacing
 }
 
 [Serializable]
@@ -117,6 +193,8 @@ public class PythonConnection : MonoBehaviour
     public event Action<EvaEventMessage> EventReceived;
     public event Action<EarthNoteMessage> EarthNoteReceived;
     public event Action<StatusMessage> StatusReceived;
+    public event Action<RouteMessage> RouteReceived;
+    public event Action<AlertMessage> AlertReceived;
 
     public bool IsConnected => websocket != null && websocket.State == WebSocketState.Open;
     public TelemetryMessage LatestTelemetry { get; private set; }
@@ -344,6 +422,11 @@ public class PythonConnection : MonoBehaviour
                 Debug.Log($"[EVA {ev.severity}] {ev.text}");
                 EventReceived?.Invoke(ev);
                 break;
+            case "alert":
+                var alert = JsonUtility.FromJson<AlertMessage>(json);
+                if (!alert.update) Debug.Log($"[Alert {alert.category} {alert.level}] {alert.title}: {alert.text}");
+                AlertReceived?.Invoke(alert);
+                break;
             case "earth_note":
                 var note = JsonUtility.FromJson<EarthNoteMessage>(json);
                 Debug.Log($"[Earth note] {note.text}");
@@ -356,6 +439,9 @@ public class PythonConnection : MonoBehaviour
                 break;
             case "site":
                 HandleSite(JsonUtility.FromJson<SiteMessage>(json));
+                break;
+            case "route":
+                RouteReceived?.Invoke(JsonUtility.FromJson<RouteMessage>(json));
                 break;
             case "welcome":
                 break;
@@ -418,6 +504,14 @@ public class PythonConnection : MonoBehaviour
         if (terraingen == null) terraingen = FindAnyObjectByType<Terraingen>();
         overlay = (terraingen != null ? terraingen.gameObject : gameObject).AddComponent<TerrainOverlay>();
         return overlay;
+    }
+
+    /// <summary>Ask the server to plan an EVA route (reply: RouteReceived). False if offline.</summary>
+    public bool RequestRoute(RouteRequest request)
+    {
+        if (!IsConnected) return false;
+        SendJson(JsonUtility.ToJson(request));
+        return true;
     }
 
     /// <summary>Send a raw JSON string to the server. Dropped silently if not connected.</summary>

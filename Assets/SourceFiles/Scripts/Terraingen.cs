@@ -56,6 +56,8 @@ public class Terraingen : MonoBehaviour
     [Header("Camera")]
     [Tooltip("How far the camera can see")]
     public float cameraFarClip = 20000f;
+    [Tooltip("Camera height above the ground at the player's feet (m). An astronaut's eyes are ~1.7 m up.")]
+    public float eyeHeight = 1.7f;
 
     [Header("Perlin fallback")]
     [Tooltip("Must be 2^n + 1: 33, 65, 129, 257, 513, 1025, 2049, 4097")]
@@ -68,6 +70,9 @@ public class Terraingen : MonoBehaviour
     public bool logPlayerHeight = false;
 
     bool terrainReady;
+
+    /// <summary>Goes up each time the player is put on a (new) terrain: the spawn point.</summary>
+    public int PlayerPlacements { get; private set; }
 
     // True until either Python's heightmap or the Perlin fallback has been applied.
     // PythonConnection only asks the server for the heightmap while this is true.
@@ -101,7 +106,7 @@ public class Terraingen : MonoBehaviour
         terrain.enabled = true;
         terrain.gameObject.SetActive(true);
 
-        if (connectToPython && FindFirstObjectByType<PythonConnection>() == null)
+        if (connectToPython && FindAnyObjectByType<PythonConnection>() == null)
             gameObject.AddComponent<PythonConnection>();
     }
 
@@ -498,7 +503,7 @@ public class Terraingen : MonoBehaviour
         float inner = Mathf.Min(Mathf.Max(titleSize.x, tileCreditStyle.CalcSize(credit).x),
                                 Mathf.Max(100f, Screen.width - 2f * (margin + pad)));
         float creditHeight = tileCreditStyle.CalcHeight(credit, inner);
-        var box = new Rect(margin, Screen.height - margin - titleSize.y - creditHeight - 2f * pad,
+        var box = new Rect(margin, Screen.height - margin - Minimap.BottomLeftHeight - titleSize.y - creditHeight - 2f * pad,
                            inner + 2f * pad, titleSize.y + creditHeight + 2f * pad);
         Color previous = GUI.color;
         GUI.color = new Color(0f, 0f, 0f, 0.65f);
@@ -627,6 +632,22 @@ public class Terraingen : MonoBehaviour
         return true;
     }
 
+    /// <summary>World y of the ground under a position (whichever tile it is on).</summary>
+    public float GroundY(Vector3 worldPos) => GroundHeight(worldPos);
+
+    /// <summary>The terrain's extent on the ground (world x/z), all tiles together.</summary>
+    public bool TryGetMapBounds(out Rect area)
+    {
+        area = default;
+        if (!terrainReady || terrain == null || terrain.terrainData == null) return false;
+        if (tiles != null)
+            area = new Rect(tileOrigin.x, tileOrigin.z, tileSize.x * tileCountX, tileSize.z * tileCountZ);
+        else
+            area = new Rect(terrain.transform.position.x, terrain.transform.position.z,
+                            terrain.terrainData.size.x, terrain.terrainData.size.z);
+        return true;
+    }
+
     float GroundHeight(Vector3 pos)
     {
         Terrain t = TileAt(pos);
@@ -643,6 +664,7 @@ public class Terraingen : MonoBehaviour
         SetPlayerPosition(pos);
 
         if (!player.gameObject.activeSelf) player.gameObject.SetActive(true);
+        PlayerPlacements++; // MapView takes this spot as Home Base
         Debug.Log($"Terraingen: placed player at {pos} (ground height {terrainHeight:F1}, " +
                   $"terrain size {terrain.terrainData.size}" +
                   (tiles != null ? $", one of {tileCountX}x{tileCountZ} tiles)" : ")"), player);
@@ -665,17 +687,33 @@ public class Terraingen : MonoBehaviour
         if (cc != null) cc.enabled = true;
     }
 
+    // A child of the player at eye height for the camera to follow (the player's pivot is the
+    // middle of its capsule, ~1 m up, which made everything look oversized)
+    Transform EyePoint()
+    {
+        Transform eye = player.Find("Eye");
+        if (eye == null)
+        {
+            eye = new GameObject("Eye").transform;
+            eye.SetParent(player, false);
+        }
+        eye.localPosition = new Vector3(0f, eyeHeight - PlayerBottomOffset(), 0f);
+        eye.localRotation = Quaternion.identity;
+        return eye;
+    }
+
     // Don't rely on scene settings: point the Cinemachine camera at the player
     // and make sure it can see far enough.
     void SetupCamera()
     {
-        CinemachineCamera vcam = FindFirstObjectByType<CinemachineCamera>();
+        CinemachineCamera vcam = FindAnyObjectByType<CinemachineCamera>();
         if (vcam != null)
         {
             if (player != null)
             {
-                vcam.Target.TrackingTarget = player;
-                vcam.ForceCameraPosition(player.position, vcam.transform.rotation);
+                Transform eye = EyePoint();
+                vcam.Target.TrackingTarget = eye;
+                vcam.ForceCameraPosition(eye.position, vcam.transform.rotation);
             }
             vcam.Lens.FarClipPlane = cameraFarClip;
         }

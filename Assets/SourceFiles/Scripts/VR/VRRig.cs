@@ -45,6 +45,8 @@ public class VRRig : MonoBehaviour
     bool turnArmed = true;
     float nextTune;
     readonly HashSet<Terrain> tuned = new HashSet<Terrain>();
+    readonly List<Canvas> converted = new List<Canvas>();  // the floating HUD panel's canvases
+    bool hudHidden;
 
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
     static void EnsureExists()
@@ -64,6 +66,13 @@ public class VRRig : MonoBehaviour
             return;
         }
         SnapTurn();
+        // While the EVA map is open the hologram stands where the HUD floats (top-down view):
+        // hide the HUD then rather than have the two cut through each other
+        if (hudHidden != MapView.AnyOpen)
+        {
+            hudHidden = MapView.AnyOpen;
+            foreach (Canvas c in converted) if (c != null) c.enabled = !hudHidden;
+        }
         if (Time.unscaledTime >= nextTune)
         {
             nextTune = Time.unscaledTime + 1f;
@@ -183,6 +192,7 @@ public class VRRig : MonoBehaviour
                 size = scaler != null ? scaler.referenceResolution : new Vector2(800f, 600f);
             }
             c.renderMode = RenderMode.WorldSpace;
+            converted.Add(c);
             c.worldCamera = cam;
             rt.SetParent(cam.transform, false);
             rt.anchorMin = rt.anchorMax = rt.pivot = new Vector2(0.5f, 0.5f);
@@ -215,6 +225,11 @@ public class VRRig : MonoBehaviour
     // ---------------------------------------------------------------
     void SnapTurn()
     {
+        if (MapView.AnyOpen)  // the right stick turns and zooms the EVA map hologram instead
+        {
+            turnArmed = false;  // re-armed once the stick is back in the middle
+            return;
+        }
         float x = MarsmapInput.Turn.ReadValue<Vector2>().x;
         if (turnArmed && Mathf.Abs(x) > 0.7f)
         {

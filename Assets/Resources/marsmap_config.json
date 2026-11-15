@@ -1,6 +1,6 @@
 {
   "_comment": "Marsmap settings, read at Play (also inside headset builds). server_url: Python/server.py's address; on a headset use the laptop's Wi-Fi IP, e.g. ws://192.168.1.23:8765, and start the server with --host 0.0.0.0. mode: auto = server if it answers within offline_after_s seconds, else the offline bundle in StreamingAssets/Marsmap; server = always the server; offline = never connect, use the bundle. offline_auto_start_s: 0 = start the EVA replay with X / Enter; otherwise start automatically this many seconds after the terrain loads. vr_*: comfort settings used only in a headset (desktop movement is unchanged). See docs/VR_QUEST.md.",
-  "server_url": "ws://127.0.0.1:8765",
+  "server_url": "ws://10.0.192.198:8765",
   "mode": "auto",
   "offline_after_s": 2.5,
   "offline_auto_start_s": 0,

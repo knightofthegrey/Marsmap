@@ -31,6 +31,18 @@ public static class VRHud
         return tint;
     }
 
+    /// <summary>A text tag at a point in the world that always faces you (e.g. a waypoint's number).
+    /// Not attached to the camera: set its position every frame.</summary>
+    /// sortingOrder: transparent things draw in this order (then far to near). Markers far out in the
+    /// world want a low one so the head-locked HUD stays on top; ones on the hologram a high one.
+    public static VRWorldTag CreateWorldTag(string name, int sortingOrder = 90)
+    {
+        var go = new GameObject(name, typeof(RectTransform));
+        var tag = go.AddComponent<VRWorldTag>();
+        tag.Build(sortingOrder);
+        return tag;
+    }
+
     internal static Font BuiltinFont()
     {
         Font f = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
@@ -172,5 +184,83 @@ public class VRHudTint : MonoBehaviour
     void OnDestroy()
     {
         if (material != null) Destroy(material);
+    }
+}
+
+public class VRWorldTag : MonoBehaviour
+{
+    const int FontSize = 36;
+    const float LinePixels = 46f;   // one line of text, in canvas units
+
+    [Tooltip("Height of one line of text (m), when Angular Size is 0")]
+    public float lineHeight = 0.025f;
+    [Tooltip("> 0: keep one line this many degrees tall whatever the distance (far-away markers)")]
+    public float angularSize = 0f;
+
+    Canvas canvas;
+    Image background;
+    Text text;
+    RectTransform rect;
+
+    internal void Build(int sortingOrder)
+    {
+        canvas = gameObject.AddComponent<Canvas>();
+        canvas.renderMode = RenderMode.WorldSpace;
+        canvas.sortingOrder = sortingOrder;
+        rect = (RectTransform)transform;
+        rect.pivot = new Vector2(0.5f, 0f);  // the position is the tag's bottom middle
+
+        var bg = new GameObject("Background", typeof(RectTransform), typeof(Image));
+        bg.transform.SetParent(transform, false);
+        var bgRect = (RectTransform)bg.transform;
+        bgRect.anchorMin = Vector2.zero;
+        bgRect.anchorMax = Vector2.one;
+        bgRect.offsetMin = bgRect.offsetMax = Vector2.zero;
+        background = bg.GetComponent<Image>();
+        background.raycastTarget = false;
+
+        var go = new GameObject("Text", typeof(RectTransform), typeof(Text));
+        go.transform.SetParent(transform, false);
+        var tr = (RectTransform)go.transform;
+        tr.anchorMin = Vector2.zero;
+        tr.anchorMax = Vector2.one;
+        tr.offsetMin = new Vector2(10f, 4f);
+        tr.offsetMax = new Vector2(-10f, -4f);
+        text = go.GetComponent<Text>();
+        text.font = VRHud.BuiltinFont();
+        text.fontSize = FontSize;
+        text.color = Color.white;
+        text.alignment = TextAnchor.MiddleCenter;
+        text.supportRichText = true;
+        text.horizontalOverflow = HorizontalWrapMode.Overflow;
+        text.verticalOverflow = VerticalWrapMode.Overflow;
+        text.raycastTarget = false;
+        Set("", new Color(0f, 0f, 0f, 0.7f));
+    }
+
+    public void Set(string label, Color backgroundColor)
+    {
+        if (background != null) background.color = backgroundColor;
+        if (text == null || text.text == label) return;
+        text.text = label;
+        rect.sizeDelta = new Vector2(Mathf.Max(text.preferredWidth + 20f, LinePixels),
+                                     Mathf.Max(text.preferredHeight + 8f, LinePixels));
+    }
+
+    public void SetVisible(bool visible)
+    {
+        if (gameObject.activeSelf != visible) gameObject.SetActive(visible);
+    }
+
+    void LateUpdate()
+    {
+        Camera cam = Camera.main;
+        if (cam == null) return;
+        Vector3 d = transform.position - cam.transform.position;
+        float dist = d.magnitude;
+        if (dist < 1e-3f) return;
+        transform.rotation = Quaternion.LookRotation(d / dist, Vector3.up);  // face you, upright
+        float line = angularSize > 0f ? 2f * dist * Mathf.Tan(angularSize * 0.5f * Mathf.Deg2Rad) : lineHeight;
+        transform.localScale = Vector3.one * (line / LinePixels);
     }
 }

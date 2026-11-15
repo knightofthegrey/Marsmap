@@ -29,6 +29,25 @@ When a headset is running, the scripts switch to VR on their own; there's nothin
 | Test dust gust | Y | G |
 | Start EVA replay (offline mode) | X | Enter |
 | Jump | A (only if `allow_jump_in_vr` is true) | Space |
+| Open / close the EVA map | Menu button (left controller); clicking the left stick also opens it | M |
+| Minimap zoom | Right stick up / down | + / − |
+
+### EVA map (route planning) in the headset
+
+Press the **Menu** button on the left controller. The terrain hologram appears about 1.3 m in front of you at table height. A panel to its left shows the route numbers, help and buttons. The right controller casts a laser; a dot shows where it lands.
+
+| Action | Quest controller | Desktop |
+|---|---|---|
+| Add a waypoint | Point at the hologram, pull the right trigger | Click |
+| Remove a waypoint | Point at its pin (the laser turns red), press A | Shift + click |
+| Turn / tilt the hologram | Hold the right grip and move your hand sideways / up and down | Drag |
+| Turn / zoom | Right stick left-right / up-down | Q E / scroll |
+| Move the area shown | Left stick | W A S D / right-drag |
+| Top-down view, Centre on me, Undo last, Clear all, Return home on/off, Close map | Point at the panel button, pull the trigger | T, F, Backspace, C, R, M |
+
+- While the map is open you can't walk, and snap turn is paused, because the sticks drive the map.
+- Pin numbers, the next waypoint's tag and the Home Base tag float in the world, and the minimap and route summary sit in the lower right of your view. IMGUI isn't drawn in a headset, so these are VR versions of the desktop labels. (`VR/MapViewVR.cs`, `VR/MinimapVR.cs`)
+- Route planning (A* around steep ground) runs in `Python/server.py`. In **server mode** the headset gets planned routes. In **offline mode** there is no server, so the map draws straight lines between waypoints, in magenta.
 
 ## Quest 1 warning
 

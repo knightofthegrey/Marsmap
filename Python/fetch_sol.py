@@ -4,6 +4,7 @@ Martian Map - build sol_samples.csv from real Curiosity data.
 Downloads one sol of:
   RAD   radiation dose rate         PDS PPI node, MSL-M-RAD-3-RDR-V1.0
   REMS  air temperature + pressure  PDS Atmospheres node, mslrem_1001 (processed "RMD" product)
+  REMS  UV (bands A, B, C, ABC, D, E, W/m^2)   same node, calibrated "RNV" product
 and writes the EVA window as sol_samples.csv for feeder.py, plus sol_samples.meta.json
 recording exactly which files the numbers came from.
 
@@ -26,6 +27,7 @@ import io
 import json
 import os
 import re
+import ssl
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from urllib.request import Request, urlopen
@@ -38,11 +40,23 @@ HEADERS = {"User-Agent": "marsmap-fetch-sol/1.0"}
 
 # ---- HTTP helpers --------------------------------------------------------
 
+def _ssl_context():
+    """python.org Python on macOS ships without CA certificates; certifi's bundle fixes that."""
+    try:
+        import certifi
+        return ssl.create_default_context(cafile=certifi.where())
+    except ImportError:
+        return ssl.create_default_context()
+
+
+SSL_CONTEXT = _ssl_context()
+
+
 def get(url, byte_range=None, timeout=120):
     req = Request(url, headers=dict(HEADERS))
     if byte_range:
         req.add_header("Range", "bytes=%d-%d" % byte_range)
-    with urlopen(req, timeout=timeout) as r:
+    with urlopen(req, timeout=timeout, context=SSL_CONTEXT) as r:
         if byte_range and r.status != 206:
             raise SystemExit(f"{url} ignored the byte-range request; refusing to download the whole file.")
         return r.read()
@@ -155,6 +169,55 @@ def fetch_rems(sol, bin_min=10):
     return temp, pres, {"files": [folder + n for n in tabs]}
 
 
+UV_BANDS = ("UV_A", "UV_B", "UV_C", "UV_ABC", "UV_D", "UV_E")
+
+
+def fetch_rems_uv(sol, bin_min=10):
+    """REMS UV sensor (UVS): the six bands in W/m^2 from the RNV product (calibrated
+    environmental data). The RMD product used above for temperature/pressure marks
+    most midday UV as -999 (unknown confidence), so UV comes from RNV.
+    Returns {band: [(lmst_h, W/m^2), ...]}, meta. Bands with no data are left out."""
+    folder = find_range_dir(REMS_BASE, sol) + f"SOL{sol:05d}/"
+    tabs = sorted(n for n in list_dir(folder) if re.fullmatch(r"RME_\d+RNV\d+_*P\d+\.TAB", n))
+    if not tabs:
+        return {}, {"error": f"no REMS RNV file for sol {sol}"}
+    bins = {}
+    for name in tabs:
+        url = folder + name
+        xml = get(url[:-4] + ".xml").decode("utf-8", "replace")
+        col = {}
+        for blk in re.findall(r"<Field_(?:Character|Delimited)>(.*?)</Field_(?:Character|Delimited)>", xml, re.S):
+            nm = re.search(r"<name>([^<]*)</name>", blk)
+            num = re.search(r"<field_number>(\d+)</field_number>", blk)
+            if nm and num:
+                col[nm[1].strip()] = int(num[1]) - 1
+        if "LMST" not in col or not any(b in col for b in UV_BANDS):
+            continue
+        text = get(url, timeout=300).decode("ascii", "replace")
+        for r in csv.reader(io.StringIO(text), skipinitialspace=True):
+            t = re.fullmatch(r"(\d+)M(\d+):(\d+):([\d.]+)", r[col["LMST"]].strip())
+            if not t:
+                continue
+            h = parse_lmst(sol, *t.groups())
+            b = bins.setdefault(int(h * 60 // bin_min), {band: [] for band in UV_BANDS})
+            for band in UV_BANDS:
+                if band in col:
+                    try:
+                        v = float(r[col[band]])
+                    except ValueError:
+                        continue
+                    if v > -900:    # -999 = no data
+                        b[band].append(v)
+    centre = lambda k: (k + 0.5) * bin_min / 60
+    out = {}
+    for band in UV_BANDS:
+        pts = [(centre(k), sum(b[band]) / len(b[band])) for k, b in sorted(bins.items()) if b[band]]
+        if pts:
+            out[band] = pts
+    return out, {"files": [folder + n for n in tabs], "product": "RNV (calibrated environmental RDR)",
+                 "unit": "W/m^2"}
+
+
 # ---- Resample onto the EVA clock -----------------------------------------
 
 def interp(pts, x):
@@ -190,6 +253,12 @@ def main():
     print(f"Sol {a.sol}: fetching REMS (temperature, pressure) ...")
     temp, pres, rems_meta = fetch_rems(a.sol)
     print(f"  {len(temp)} ten-minute bins with data")
+    print(f"Sol {a.sol}: fetching REMS UV ...")
+    uv, uv_meta = fetch_rems_uv(a.sol)
+    if uv:
+        print(f"  bands {', '.join(uv)}")
+    else:
+        print(f"  no UV ({uv_meta.get('error', 'no valid readings')}); the CSV will have no UV columns")
 
     rows, worst_gap = [], 0.0
     n = int(a.eva_min // a.step_min)
@@ -197,13 +266,17 @@ def main():
         t = min(i * a.step_min, a.eva_min)
         h = start_h + t / 60
         worst_gap = max(worst_gap, gap_h(dose, h), gap_h(temp, h), gap_h(pres, h))
-        rows.append({
+        row = {
             "t_eva_min": round(t, 2),
             "lmst_h": round(h, 4),
             "dose_rate_uGy_per_h": round(interp(dose, h), 3),
             "temp_c": round(interp(temp, h), 2),
             "pressure_pa": round(interp(pres, h), 2),
-        })
+        }
+        for band, pts in uv.items():   # uv_a_wm2, uv_b_wm2, ... (REMS UV bands, W/m^2)
+            worst_gap = max(worst_gap, gap_h(pts, h))
+            row[band.lower() + "_wm2"] = round(interp(pts, h), 4)
+        rows.append(row)
     if worst_gap > 1.5:
         print(f"WARNING: up to {worst_gap:.1f} Mars hours between real readings in this window; "
               "values there are interpolated. Try another --start-lmst or --sol.")
@@ -220,6 +293,7 @@ def main():
         "source": f"MSL RAD+REMS sol {a.sol} ({rad_meta['earth_date']}), replayed",
         "rad": rad_meta,
         "rems": rems_meta,
+        "rems_uv": uv_meta,
         "not_available": {"wind_ms": "REMS wind sensor returns no data for these sols"},
         "max_gap_between_readings_h": round(worst_gap, 2),
         "generated_by": "fetch_sol.py",
@@ -233,6 +307,8 @@ def main():
     print(f"  dose  {min(col('dose_rate_uGy_per_h')):.2f}-{max(col('dose_rate_uGy_per_h')):.2f} uGy/h")
     print(f"  temp  {min(col('temp_c')):.1f} to {max(col('temp_c')):.1f} C")
     print(f"  press {min(col('pressure_pa')):.0f}-{max(col('pressure_pa')):.0f} Pa")
+    if "uv_abc_wm2" in rows[0]:
+        print(f"  UV    {min(col('uv_abc_wm2')):.2f}-{max(col('uv_abc_wm2')):.2f} W/m^2 (UV-ABC)")
 
 
 if __name__ == "__main__":
