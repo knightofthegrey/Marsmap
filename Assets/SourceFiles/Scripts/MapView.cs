@@ -54,6 +54,15 @@ public class MapView : MonoBehaviour
     [Tooltip("Reaching this close (m) to a waypoint shows the next one (the ring on the ground)")]
     public float arriveDistance = 25f;
 
+    [Header("Home Base")]
+    [Tooltip("Show an orange sphere at Home Base (display only, nothing collides with it)")]
+    public bool showHomeSphere = true;
+    [Tooltip("Size of the Home Base sphere (m across)")]
+    public float homeSphereSize = 12f;
+    [Tooltip("Home Base is this far in front of where you're put on the map, so its sphere " +
+             "isn't on top of you (well inside the arrival radius)")]
+    public float homeBaseAhead = 15f;
+
     [Header("Compass arrows")]
     [Tooltip("Where the red (next waypoint) and green (Home Base) arrows ride on the compass, " +
              "as a share of its radius (1 = its edge). Both use this.")]
@@ -106,6 +115,7 @@ public class MapView : MonoBehaviour
     readonly List<LineRenderer> holoLines = new List<LineRenderer>();
     GameObject holoYou, holoHome;
     GameObject homeBeam;          // Home Base on the ground: always shown while there's a route
+    GameObject homeSphere;        // ...and an orange sphere marking it (display only)
     Material homeMat, homePinMat;
     static readonly Color HomeGreen = new Color(0.2f, 1f, 0.45f);
 
@@ -236,6 +246,7 @@ public class MapView : MonoBehaviour
             if (kv.Key != null) kv.Key.dest = kv.Value; // arrows back to what they pointed at
         if (targetBeam != null) Destroy(targetBeam);
         if (homeBeam != null) Destroy(homeBeam);
+        if (homeSphere != null) Destroy(homeSphere);
         if (targetRing != null) Destroy(targetRing.gameObject);
         if (routeRoot != null) Destroy(routeRoot);
         if (holoRoot != null) Destroy(holoRoot);
@@ -294,7 +305,10 @@ public class MapView : MonoBehaviour
         if (terraingen == null || player == null || !player.gameObject.activeInHierarchy) return;
         if (terraingen.PlayerPlacements == placementsSeen) return;
         placementsSeen = terraingen.PlayerPlacements;
-        tripStart = player.position;
+        Vector3 ahead = Vector3.ProjectOnPlane(player.forward, Vector3.up);
+        ahead = ahead.sqrMagnitude > 1e-4f ? ahead.normalized : Vector3.forward;
+        float gap = Mathf.Max(homeBaseAhead, homeSphereSize * 0.5f + 5f); // clear of the sphere
+        tripStart = player.position + ahead * gap; // in view, not on top of you
         hasTrip = true;
     }
 
@@ -1079,8 +1093,42 @@ public class MapView : MonoBehaviour
     // (it's the target's own beam when you're heading back)
     bool HasHome => hasTrip;
 
+    void UpdateHomeSphere()
+    {
+        bool show = showHomeSphere && HasHome && terraingen != null;
+        if (!show)
+        {
+            if (homeSphere != null) homeSphere.SetActive(false);
+            return;
+        }
+        if (homeSphere == null)
+        {
+            homeSphere = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+            homeSphere.name = "Home Base";
+            Destroy(homeSphere.GetComponent<Collider>()); // display only
+            Shader lit = Shader.Find("Universal Render Pipeline/Lit");
+            var mat = lit != null ? new Material(lit) : MakeMaterial(new Color(1f, 0.45f, 0.1f));
+            var orange = new Color(1f, 0.45f, 0.1f);
+            mat.color = orange;
+            if (mat.HasProperty("_BaseColor")) mat.SetColor("_BaseColor", orange);
+            if (mat.HasProperty("_Smoothness")) mat.SetFloat("_Smoothness", 0.35f);
+            if (mat.HasProperty("_EmissionColor")) // a faint glow so it's easy to spot
+            {
+                mat.EnableKeyword("_EMISSION");
+                mat.SetColor("_EmissionColor", orange * 0.25f);
+            }
+            homeSphere.GetComponent<Renderer>().sharedMaterial = mat;
+        }
+        homeSphere.SetActive(true);
+        Vector3 at = tripStart;
+        at.y = terraingen.GroundY(at) + homeSphereSize * 0.4f; // sits a little into the ground
+        homeSphere.transform.position = at;
+        homeSphere.transform.localScale = Vector3.one * homeSphereSize;
+    }
+
     void UpdateHomeBeam()
     {
+        UpdateHomeSphere();
         bool headingHome = waypoints.Count > 0 && nextWaypoint >= waypoints.Count && nextWaypoint < TargetCount;
         bool atHome = player != null &&
                       new Vector2(player.position.x - tripStart.x, player.position.z - tripStart.z).magnitude < arriveDistance;
