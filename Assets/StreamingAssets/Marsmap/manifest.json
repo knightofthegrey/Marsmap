@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "terrain": [
+    "01_site.json",
+    "02_hmap.bin",
+    "03_layer_photo.bin",
+    "04_layer_slope.bin",
+    "05_layer_thermal.bin"
+  ],
+  "replay": "replay.json"
+}

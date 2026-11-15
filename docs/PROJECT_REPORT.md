@@ -2,7 +2,8 @@
 
 > **Living document.** This describes the project **as it is now**, not the final plan. It gets updated as features are added; see the [Changelog](#13-changelog) at the bottom.
 >
-> **State described:** branch `DataSetIntegration`, commit `89b8d8c` (14 Nov 2026, pushed to `origin`). This report (`docs/`) is not committed yet.
+> **State described:** branch `DataSetIntegration` at `89b8d8c` (14 Nov 2026), plus the VR work on branch `vr-quest` ([§14](#14-vr-meta-quest-in-progress)).
+> **Not yet covered here:** features merged from `main` later on 14–15 Nov: the tiled Gale crater map (`dem_builder.py`, `server.py --polygon`, the new default), the compass and direction arrows (`Compass.cs`, `PointAt.cs`, new `GetState` nav panel), and the route-planning notebook (`Mars_mapping.ipynb`). These sections still need updating.
 > **Event:** NASA Space Apps Challenge 2026, Seattle. Challenge: [Interplanetary Survival Guide: Martian Map](https://www.spaceappschallenge.org/2026/challenges/interplanetary-survival-guide-martian-map/).
 > **Fact-checked** on 14 Nov 2026 against the code, the scene file, git and every linked source.
 
@@ -21,6 +22,7 @@
 11. [Challenge requirements checklist](#11-challenge-requirements-checklist)
 12. [Known limitations and open issues](#12-known-limitations-and-open-issues)
 13. [Changelog](#13-changelog)
+14. [VR (Meta Quest), in progress](#14-vr-meta-quest-in-progress)
 
 ---
 
@@ -223,7 +225,8 @@ Only project files are listed here. The Unity template's art, audio and tutorial
 Marsmap/
 ├── README.md                         Challenge text, our idea, resources list (team overview)
 ├── docs/
-│   └── PROJECT_REPORT.md             This report
+│   ├── PROJECT_REPORT.md             This report
+│   └── VR_QUEST.md                   How to build and run on a Meta Quest (vr-quest branch)
 ├── .gitattributes                    Line-ending + LFS rules; *Terrain*.asset stored as binary, *.jpg via LFS
 ├── .gitignore                        Unity template + Python ignores (.venv/, __pycache__/, *.pyc); .DS_Store is not ignored
 ├── Packages/manifest.json            Unity packages (URP, Input System, Cinemachine, NativeWebSocket, ...)
@@ -239,6 +242,8 @@ Marsmap/
 │           ├── CharacterMover.cs     WASD/arrows, Space jump, Shift sprint, Mars gravity (set in the scene)
 │           ├── DustStormEffect.cs    Dust gust visuals on the dust_gust event; G = test gust
 │           ├── MarsSky.cs            Mars sky gradient, warm ambient light
+│           ├── OfflineReplay.cs      vr-quest: plays the bundled terrain + EVA replay with no server
+│           ├── VR/                   vr-quest: MarsmapConfig, MarsmapInput (keys + Quest buttons), VRHud, VRRig
 │           ├── Initialize.cs         Puts the player on the ground (fallback when no Terraingen)
 │           ├── GetState.cs           Readout of yaw, pitch, X/Y; the working one is on the Canvas, tracking the camera
 │           └── CameraFollow.cs, Pickup.cs, UpdateCollectibleCount.cs, MotionAudioController.cs
@@ -253,6 +258,7 @@ Marsmap/
     ├── make_site.py                  Downloads HiRISE + THEMIS for the rover's position -> site/
     ├── prep_terrain.py               Earlier HiRISE -> Unity RAW heightmap + cost grid tool; helpers reused
     ├── raster_to_csv.py              Any map file -> CSV grid (values, or slope classes)
+    ├── export_offline.py             vr-quest: writes the offline bundle to Assets/StreamingAssets/Marsmap/
     ├── events.json                   Scripted demo events (hand-written)
     ├── sol_samples.csv               REAL replay data: sol 4560, 09:00-13:00 Mars time, every 5 EVA min (49 rows)
     ├── sol_samples.meta.json         Exact NASA files sol_samples.csv came from
@@ -673,4 +679,28 @@ Key: ✅ done · 🟡 partly done · ⬜ not started
 | 14 Nov 2026 | `972fb4e` | Dust gust effect; 48-second demo timeline |
 | 14 Nov 2026 | `3f57daa` | Mars sky; matte height colours (fixed "blue hills"); lighter dust |
 | 14 Nov 2026 | `89b8d8c` | `server.py` help text: plain `feeder.py` (4 h EVA in 48 s, the 300× default) |
-| 14 Nov 2026 | (uncommitted) | This report, fact-checked against code, scene, git and all linked sources |
+| 14 Nov 2026 | `adcf07d` | This report, fact-checked against code, scene, git and all linked sources |
+| 15 Nov 2026 | `vr-quest` | Meta Quest support: XR rig, joystick controls, floating HUD, offline bundle (`export_offline.py`, `OfflineReplay.cs`), settings file; untested on a headset. See [§14](#14-vr-meta-quest-in-progress) |
+
+---
+
+## 14. VR (Meta Quest), in progress
+
+On branch `vr-quest` (built on `main` as of `cb06037`). Full guide: [docs/VR_QUEST.md](VR_QUEST.md).
+
+**What exists:**
+- **XR rig:** `VRRig.cs` puts the camera on the headset, switches off Cinemachine, and does right-stick snap turn. It also turns Screen Space canvases into a floating panel and points the compass, arrows and nav readout at the head.
+- **Quest controls:** keyboard and Quest controller bindings side by side (`MarsmapInput.cs`):
+  - left stick to walk where you look, left grip to sprint;
+  - B for the next map layer, Y to test the dust gust, X to start the EVA.
+- **Floating HUD:** VR versions of the layer label and dust tint (`VRHud.cs`).
+- **Settings file:** `Assets/Resources/marsmap_config.json` holds the server address, mode and comfort speeds (`MarsmapConfig.cs`).
+- **Offline mode:**
+  - `Python/export_offline.py` writes the exact server and feeder messages to `Assets/StreamingAssets/Marsmap/` (HiRISE site: 5.1 MB of terrain + a 48 s replay);
+  - `OfflineReplay.cs` plays them through `PythonConnection.InjectMessage`, so a headset needs no laptop or Wi-Fi;
+  - verified byte-identical to the live server's terrain reply, with the same events, telemetry fields and final dose as the live feeder.
+- **Server help:** `server.py` prints the LAN address to put in `server_url`.
+
+**Untested:** nothing has run on a headset yet. Quest 1 is officially unsupported by Unity 6 and current Meta SDKs; see the guide for the risks and fallbacks.
+
+**Desktop is unchanged:** with no headset, the VR scripts do nothing, and the `auto` mode only falls back to the bundle inside a headset.

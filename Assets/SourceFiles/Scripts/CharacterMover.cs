@@ -62,6 +62,18 @@ public class CharacterMover : MonoBehaviour
         if (added.Count > 0)
             Debug.Log("[CharacterMover] No bindings set in the Inspector, using defaults: " +
                       string.Join(", ", added) + " (hold Left Shift to sprint)", this);
+
+        // Quest controllers, always added (alongside keyboard or Inspector bindings):
+        // left stick walks, A jumps (only if marsmap_config.json allows jumping in VR).
+        AddBindingOnce(moveAction, MarsmapInput.LeftStickPath);
+        AddBindingOnce(jumpAction, MarsmapInput.RightAPath);
+    }
+
+    private static void AddBindingOnce(InputAction action, string path)
+    {
+        foreach (InputBinding b in action.bindings)
+            if (b.path == path) return;   // already there (e.g. Play pressed again without a reload)
+        action.AddBinding(path);
     }
 
     private void OnEnable()
@@ -86,6 +98,12 @@ public class CharacterMover : MonoBehaviour
     {
         Vector2 input = moveAction.ReadValue<Vector2>();
 
+        if (MarsmapInput.XRActive)
+        {
+            HandleMovementVR(input);
+            return;
+        }
+
         // Align player yaw with the Cinemachine Pan angle (or keep the current yaw without one)
         float yaw;
         if (panTiltCamera != null)
@@ -104,14 +122,26 @@ public class CharacterMover : MonoBehaviour
         Quaternion yawRotation = Quaternion.Euler(0f, yaw, 0f);
         transform.rotation = yawRotation;
 
-        Keyboard keyboard = Keyboard.current;
         float speed = moveSpeed;
-        if (keyboard != null && keyboard.leftShiftKey.isPressed) speed *= sprintMultiplier;
+        if (MarsmapInput.Sprint.IsPressed()) speed *= sprintMultiplier;  // Left Shift (or left grip)
 
         // Calculate world-space movement relative to look direction
         Vector3 moveDirection = yawRotation * new Vector3(input.x, 0f, input.y);
         controller.Move(moveDirection * (speed * Time.deltaTime));
     }
+
+    // Headset: walk where you're looking (head yaw); the body's own yaw belongs to VRRig's snap
+    // turn, so it isn't overwritten here. Slower than desktop: fast smooth motion causes nausea.
+    private void HandleMovementVR(Vector2 input)
+    {
+        Camera head = Camera.main;
+        float yaw = head != null ? head.transform.eulerAngles.y : transform.eulerAngles.y;
+        float speed = MarsmapConfig.VrMoveSpeed;
+        if (MarsmapInput.Sprint.IsPressed()) speed *= MarsmapConfig.VrSprintMultiplier;
+        Vector3 moveDirection = Quaternion.Euler(0f, yaw, 0f) * new Vector3(input.x, 0f, input.y);
+        controller.Move(Vector3.ClampMagnitude(moveDirection, 1f) * (speed * Time.deltaTime));
+    }
+
     private void HandleVertical()
     {
         if (controller.isGrounded && verticalVelocity.y < 0f)
@@ -119,7 +149,8 @@ public class CharacterMover : MonoBehaviour
             verticalVelocity.y = -2f;
         }
 
-        if (jumpAction.WasPressedThisFrame() && controller.isGrounded)
+        bool jumpAllowed = !MarsmapInput.XRActive || MarsmapConfig.AllowJumpInVR;
+        if (jumpAllowed && jumpAction.WasPressedThisFrame() && controller.isGrounded)
         {
             verticalVelocity.y = Mathf.Sqrt(jumpHeight * -2f * gravity);
         }

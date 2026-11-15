@@ -90,9 +90,63 @@ def interp(rows, t_min, key):
     return rows[-1][key]
 
 
+def encode(msg):
+    """The exact JSON text sent for a message (also used by export_offline.py)."""
+    return json.dumps({"v": SCHEMA_VERSION, **msg})
+
+
+def telemetry_message(samples, t_min, dose_mGy, source):
+    msg = {"type": "telemetry", "t_eva_s": round(t_min * 60, 1)}
+    for col in samples[0]:
+        if col != "t_eva_min":
+            msg[RENAME.get(col, col)] = round(interp(samples, t_min, col), 3)
+    msg["dose_total_mGy"] = round(dose_mGy, 4)
+    msg["source"] = source
+    return msg
+
+
+def event_message(ev):
+    ev = dict(ev)
+    ev["t_eva_s"] = round(ev.pop("t_eva_min") * 60, 1)
+    return ev
+
+
+def timeline(samples, events, speed, tick_s, eva_min, source):
+    """The whole replay as (t_eva_min, message) pairs, as run() would send them if every tick
+    landed exactly on time. Used by export_offline.py for the headset's offline mode."""
+    out = [(0.0, {"type": "status", "state": "started", "speed": speed})]
+    pending = sorted(events, key=lambda e: e["t_eva_min"])
+    step = tick_s * speed / 60.0
+    dose_mGy, last_t, k = 0.0, 0.0, 0
+    while True:
+        t_min = k * step
+        if t_min > eva_min:
+            break
+        rate = interp(samples, t_min, "dose_rate_uGy_per_h")
+        dose_mGy += rate * ((t_min - last_t) / 60.0) / 1000.0  # uGy/h * h -> mGy
+        last_t = t_min
+        out.append((t_min, telemetry_message(samples, t_min, dose_mGy, source)))
+        while pending and pending[0]["t_eva_min"] <= t_min:
+            out.append((t_min, event_message(pending.pop(0))))
+        k += 1
+    out.append((last_t, {"type": "status", "state": "finished", "dose_total_mGy": round(dose_mGy, 4)}))
+    return out
+
+
+def load_source(samples_path, override=None):
+    """Data credit for the HUD: --source, else the .meta.json next to the CSV."""
+    if override:
+        return override
+    try:
+        with open(os.path.splitext(samples_path)[0] + ".meta.json") as f:
+            return json.load(f)["source"]
+    except (OSError, KeyError, ValueError):
+        return "unknown source (no .meta.json next to the CSV)"
+
+
 async def run(url, samples, events, speed, tick_s, eva_min, source):
     async with websockets.connect(url) as ws:
-        send = lambda msg: ws.send(json.dumps({"v": SCHEMA_VERSION, **msg}))
+        send = lambda msg: ws.send(encode(msg))
         await send({"type": "hello", "from": "feeder"})
         print(f"Connected to {url}; replaying {eva_min:g} EVA minutes at {speed:g}x "
               f"(ends after {eva_min * 60 / speed:.0f} s)")
@@ -110,17 +164,9 @@ async def run(url, samples, events, speed, tick_s, eva_min, source):
             rate = interp(samples, t_min, "dose_rate_uGy_per_h")
             dose_mGy += rate * ((t_min - last_t) / 60.0) / 1000.0  # uGy/h * h -> mGy
             last_t = t_min
-            msg = {"type": "telemetry", "t_eva_s": round(t_min * 60, 1)}
-            for col in samples[0]:
-                if col != "t_eva_min":
-                    msg[RENAME.get(col, col)] = round(interp(samples, t_min, col), 3)
-            msg["dose_total_mGy"] = round(dose_mGy, 4)
-            msg["source"] = source
-            await send(msg)
+            await send(telemetry_message(samples, t_min, dose_mGy, source))
             while pending and pending[0]["t_eva_min"] <= t_min:
-                ev = dict(pending.pop(0))
-                ev["t_eva_s"] = round(ev.pop("t_eva_min") * 60, 1)
-                await send(ev)
+                await send(event_message(pending.pop(0)))
             await asyncio.sleep(tick_s)
         await send({"type": "status", "state": "finished", "dose_total_mGy": round(dose_mGy, 4)})
         print(f"Finished. Total dose {dose_mGy:.4f} mGy")
@@ -141,13 +187,7 @@ def main():
     samples = load_samples(a.samples)
     if "dose_rate_uGy_per_h" not in samples[0]:
         raise SystemExit(f"{a.samples} needs a dose_rate_uGy_per_h column (run fetch_sol.py)")
-    if not a.source:
-        meta_path = os.path.splitext(a.samples)[0] + ".meta.json"
-        try:
-            with open(meta_path) as f:
-                a.source = json.load(f)["source"]
-        except (OSError, KeyError, ValueError):
-            a.source = "unknown source (no .meta.json next to the CSV)"
+    a.source = load_source(a.samples, a.source)
     print(f"Data: {a.source}")
     with open(a.events) as f:
         events = json.load(f)

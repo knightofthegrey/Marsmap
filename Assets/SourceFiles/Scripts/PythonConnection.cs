@@ -128,6 +128,14 @@ public class PythonConnection : MonoBehaviour
     private bool running;
     private bool warnedUnreachable;
     private bool wasOpen;
+    private bool everConnected;
+    private int loopId;             // only the newest socket loop may keep running
+    private OfflineReplay offline;  // set while the offline bundle is in use
+
+    const string DefaultUrl = "ws://127.0.0.1:8765";
+
+    /// <summary>True when data comes from the offline bundle instead of the server.</summary>
+    public bool IsOffline => offline != null;
 
     // Reset statics when "Enter Play Mode Options" skips the domain reload.
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
@@ -154,13 +162,63 @@ public class PythonConnection : MonoBehaviour
         Instance = this;
     }
 
-    private async void Start()
+    private void Start()
     {
         if (terraingen == null) terraingen = FindAnyObjectByType<Terraingen>();
-        Debug.Log($"[PythonConnection] Connecting to {url}");
+        // Assets/Resources/marsmap_config.json sets the address (a headset needs the laptop's
+        // Wi-Fi IP); a value typed into the Inspector still wins.
+        if (url == DefaultUrl) url = MarsmapConfig.ServerUrl;
 
+        switch (MarsmapConfig.Mode)
+        {
+            case "offline":
+                StartOffline("mode is \"offline\" in marsmap_config.json");
+                return;
+            case "server":
+                break;
+            default:  // "auto": the server if it answers soon, else the offline bundle
+                Invoke(nameof(AutoOfflineCheck), Mathf.Max(0.5f, MarsmapConfig.OfflineAfterSeconds));
+                break;
+        }
+        RunSocketLoop();
+    }
+
+    // Auto mode falls back to the bundle only in a headset; on desktop it keeps waiting for the
+    // server as before (set "mode": "offline" to use the bundle on desktop).
+    void AutoOfflineCheck()
+    {
+        if (!everConnected && offline == null && MarsmapInput.XRActive)
+            StartOffline($"no server at {url} after {MarsmapConfig.OfflineAfterSeconds:0.#} s");
+    }
+
+    // Stop the socket and play the bundle in StreamingAssets/Marsmap instead (export_offline.py).
+    void StartOffline(string reason)
+    {
+        running = false;
+        websocket?.CancelConnection();
+        offline = gameObject.AddComponent<OfflineReplay>();
+        offline.Begin(this, terraingen, reason);
+    }
+
+    /// <summary>Called by OfflineReplay when there is no bundle: go back to the server.</summary>
+    internal void OfflineUnavailable()
+    {
+        if (offline != null) Destroy(offline);
+        offline = null;
+        if (!running) RunSocketLoop();
+    }
+
+    /// <summary>Handle bytes exactly as if they had arrived over the WebSocket (offline mode).</summary>
+    public void InjectMessage(byte[] bytes) => HandleMessage(bytes);
+
+    private async void RunSocketLoop()
+    {
+        // An older loop may still be asleep in Task.Delay after StartOffline; the id makes it
+        // stop when it wakes, so two loops never run at once (no doubled messages).
+        int id = ++loopId;
+        Debug.Log($"[PythonConnection] Connecting to {url}");
         running = true;
-        while (running)
+        while (running && id == loopId)
         {
             websocket = new WebSocket(url);
             websocket.OnOpen += HandleOpen;
@@ -171,15 +229,21 @@ public class PythonConnection : MonoBehaviour
             // Returns only when the connection fails or closes.
             await websocket.Connect();
 
-            if (!running) break;
+            if (!running || id != loopId) break;
             await Task.Delay(TimeSpan.FromSeconds(reconnectDelaySeconds));
         }
     }
 
     private void HandleOpen()
     {
+        if (offline != null)  // the offline bundle took over; don't mix two data sources
+        {
+            websocket?.CancelConnection();
+            return;
+        }
         warnedUnreachable = false;
         wasOpen = true;
+        everConnected = true;
         Debug.Log($"[PythonConnection] Connected to {url}");
         SendJson($"{{\"v\":{SchemaVersion},\"type\":\"hello\",\"from\":\"unity\"}}");
         // Only while Terraingen is still waiting: respects its "Connect To Python" toggle, and
@@ -192,7 +256,7 @@ public class PythonConnection : MonoBehaviour
 
     private void HandleError(string error)
     {
-        if (warnedUnreachable) return;
+        if (warnedUnreachable || offline != null) return;  // offline: we cancelled it ourselves
         warnedUnreachable = true;
         Debug.LogWarning($"[PythonConnection] Can't reach {url} ({error}). " +
                          $"Retrying every {reconnectDelaySeconds:0.#}s - is Python/server.py running?");

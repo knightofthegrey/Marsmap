@@ -173,3 +173,6 @@ LightingData.asset     binary
 # Terrain Asset
 # Unity saves TerrainData as binary even in Force Text mode; eol=lf above would corrupt it
 *Terrain*.asset        binary
+
+# Offline bundle for the headset (Python/export_offline.py): raw WebSocket messages
+Assets/StreamingAssets/Marsmap/*.bin  binary
