@@ -2,9 +2,9 @@ using UnityEngine;
 using UnityEngine.InputSystem;
 
 /// <summary>
-/// Dust gust: when feeder.py sends the "dust_gust" event, orange fog rolls in (visibility
-/// drops to well under 100 m), the sun dims, the screen takes a dusty tint and dust streaks
-/// blow past the camera. After the gust it all clears again.
+/// Dust gust: when feeder.py sends the "dust_gust" event, orange fog rolls in (nearby ground
+/// stays visible, distant ground fades out past ~50-150 m), the sun dims, the screen takes a
+/// dusty tint and dust streaks blow past the camera. After the gust it all clears again.
 ///
 /// Created automatically if it isn't in the scene (like PythonConnection).
 /// Press G in Play mode to trigger a test gust without the feeder.
@@ -19,9 +19,9 @@ public class DustStormEffect : MonoBehaviour
 
     [Header("Look")]
     public Color dustColor = new Color(0.66f, 0.45f, 0.28f);
-    [Tooltip("Exponential-squared fog density at the peak. 0.025 leaves roughly 70-80 m of visibility.")]
-    public float peakFogDensity = 0.025f;
-    [Range(0f, 1f)] public float peakScreenTint = 0.35f;
+    [Tooltip("Exponential-squared fog density at the peak. 0.012: ground ~70% visible at 50 m, mostly hidden past ~150 m. Higher = thicker.")]
+    public float peakFogDensity = 0.012f;
+    [Range(0f, 1f)] public float peakScreenTint = 0.22f;
     [Range(0f, 1f)] [Tooltip("Sun brightness at the peak, as a fraction of normal")]
     public float sunAtPeak = 0.45f;
     public float maxDustPerSecond = 900f;

@@ -263,7 +263,16 @@ public class Terraingen : MonoBehaviour
             for (int p = 0; p < 16; p++) px[p] = gradient[i];
             tex.SetPixels(px);
             tex.Apply();
-            layers[i] = new TerrainLayer { diffuseTexture = tex, tileSize = new Vector2(100, 100) };
+            // Matte: otherwise URP reads the texture's alpha (1) as smoothness and the ground
+            // turns into a mirror that reflects the blue sky ("blue hills").
+            layers[i] = new TerrainLayer
+            {
+                diffuseTexture = tex,
+                tileSize = new Vector2(100, 100),
+                metallic = 0f,
+                smoothness = 0f,
+                smoothnessSource = TerrainLayerSmoothnessSource.ConstantOnly,
+            };
         }
         td.terrainLayers = layers;
 

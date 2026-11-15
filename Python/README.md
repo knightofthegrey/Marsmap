@@ -50,7 +50,7 @@ Demo timeline at the default speed (start the feeder once Unity is in Play mode)
 | Real time | Event | In Unity |
 |---|---|---|
 | ~8 s | Earth note | Console |
-| ~20 s | Dust gust (`duration_s` 13) | Orange fog, dimmed sun, dusty tint, blowing dust; clears by ~33 s (`DustStormEffect`, press G to test) |
+| ~20 s | Dust gust (`duration_s` 13) | Orange fog (ground fades past ~50-150 m), dimmed sun, dusty tint, blowing dust; clears by ~33 s (`DustStormEffect`, press G to test) |
 | ~35 s | Navigation degraded | Console |
 | ~48 s | EVA finished | Console |
 
