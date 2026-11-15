@@ -18,8 +18,10 @@ Inputs:
 
 Usage:
   .venv/bin/pip install -r Python/requirements.txt   (once, from the Marsmap folder)
-  python feeder.py --url ws://localhost:8765 --speed 80
-    --speed 80 squeezes a 4-hour EVA into 3 minutes for the demo.
+  python feeder.py                       # demo pace: 4-hour EVA in 48 s
+  python feeder.py --speed 80            # slower: 3 minutes
+    --speed is EVA minutes per real minute. At the default 300 the events land at
+    ~8 s (Earth note), ~20 s (dust gust, lasts duration_s) and ~35 s (nav degraded).
 
 Message format (agree this with whoever owns the server and the Unity side;
 the Unity classes live in Assets/SourceFiles/Scripts/PythonConnection.cs):
@@ -92,7 +94,10 @@ async def run(url, samples, events, speed, tick_s, eva_min, source):
     async with websockets.connect(url) as ws:
         send = lambda msg: ws.send(json.dumps({"v": SCHEMA_VERSION, **msg}))
         await send({"type": "hello", "from": "feeder"})
-        print(f"Connected to {url}; replaying {eva_min:g} EVA minutes at {speed:g}x")
+        print(f"Connected to {url}; replaying {eva_min:g} EVA minutes at {speed:g}x "
+              f"(ends after {eva_min * 60 / speed:.0f} s)")
+        for e in sorted(events, key=lambda e: e["t_eva_min"]):
+            print(f"  at {e['t_eva_min'] * 60 / speed:5.1f} s: {e.get('id') or e['type']}")
         await send({"type": "status", "state": "started", "speed": speed})
         pending = sorted(events, key=lambda e: e["t_eva_min"])
         dose_mGy = 0.0
@@ -127,7 +132,8 @@ def main():
     here = Path(__file__).resolve().parent  # defaults work from any folder
     ap.add_argument("--samples", default=str(here / "sol_samples.csv"))
     ap.add_argument("--events", default=str(here / "events.json"))
-    ap.add_argument("--speed", type=float, default=80.0, help="EVA minutes per real minute")
+    ap.add_argument("--speed", type=float, default=300.0,
+                    help="EVA minutes per real minute (300 = 4-hour EVA in 48 s, for the 2-minute demo)")
     ap.add_argument("--tick", type=float, default=0.5, help="seconds between telemetry messages")
     ap.add_argument("--eva-min", type=float, default=240.0, help="EVA length in minutes")
     ap.add_argument("--source", help="data credit shown on the HUD (default: from <samples>.meta.json)")

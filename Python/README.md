@@ -39,10 +39,20 @@ Then (plain `python3` is fine: `server.py` and `feeder.py` re-launch themselves 
 python3 Python/server.py                      # terminal 1: real terrain from Python/site/ (demo if it's missing)
 python3 Python/server.py --demo               #   ...or the fake demo terrain
 python3 Python/server.py export.csv 1025      #   ...or a JMARS pixel export
-python3 Python/feeder.py --speed 80           # terminal 2: 4-hour EVA in 3 minutes
+python3 Python/feeder.py                      # terminal 2: 4-hour EVA in 48 s (demo pace)
+python3 Python/feeder.py --speed 80           #   ...or slower, 3 minutes
 ```
 
 The feeder finds `sol_samples.csv` and `events.json` next to itself, whatever folder you run it from.
+
+Demo timeline at the default speed (start the feeder once Unity is in Play mode):
+
+| Real time | Event | In Unity |
+|---|---|---|
+| ~8 s | Earth note | Console |
+| ~20 s | Dust gust (`duration_s` 13) | Orange fog, dimmed sun, dusty tint, blowing dust; clears by ~33 s (`DustStormEffect`, press G to test) |
+| ~35 s | Navigation degraded | Console |
+| ~48 s | EVA finished | Console |
 
 Press Play in Unity at any point. `PythonConnection` retries every 2 s until the server is up,
 asks for the heightmap once (Terraingen falls back to Perlin terrain if none arrives in 5 s), and

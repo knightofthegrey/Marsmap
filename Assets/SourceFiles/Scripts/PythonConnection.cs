@@ -36,6 +36,7 @@ public class EvaEventMessage
     public string id;        // e.g. "dust_gust", "nav_degraded"
     public string severity;  // "caution" | "warning"
     public string text;
+    public float duration_s; // optional: how long the effect lasts in real seconds (0 = default)
 }
 
 [Serializable]
