@@ -17,17 +17,29 @@ Two jobs:
      status and the latest telemetry so the HUD fills in immediately.
 
 Usage:
-    python server.py                      # Python/site/terrain.csv if it exists, else demo
+    python server.py                      # Gale crater (DEFAULT_POLYGON below; cached tiles load fast)
+    python server.py --site               # the Curiosity HiRISE site in Python/site/ (make_site.py)
     python server.py --demo               # demo heightmap (fake sine-wave hills)
     python server.py export.csv           # JMARS pixel export CSV, 513x513
     python server.py export.csv 1025      # custom resolution (2^n + 1)
     python server.py --host 0.0.0.0       # also accept other machines
+
+  Polygon: pull real terrain for any area (lon,lat points; lat,lon is detected too):
+    python server.py --polygon 77.3,18.3 77.6,18.3 77.6,18.6 77.3,18.6
+    python server.py --polygon-file area.geojson     # GeoJSON, or a text file of lon,lat lines
+  Heights: USGS CTX DTMs (20 m) where they exist, 200 m MOLA-HRSC everywhere else. Image:
+  THEMIS + CTX photos, sent as the "photo" layer (outside the polygon is dimmed). Areas under
+  ~80 km across get the full 20 m. Everything is cached in Python/imagery_cache/, so the
+  same polygon loads instantly next time. Needs requirements-maps.txt (rasterio).
+  Bigger areas are split into a grid of tiles (2049x2049, ~41 km each at 20 m) that Unity
+  joins into one seamless terrain (TILE + TIMG messages). --max-tiles N (default 16) caps
+  how many; past that the points get further apart instead.
   then, in a second terminal:
     python feeder.py                      # replays real RAD + REMS data (4 h EVA in 48 s)
 
 Needs: .venv/bin/pip install -r Python/requirements.txt   (Windows: .venv\\Scripts\\pip ...)
 
-Site message (JSON text, only for a make_site.py site):
+Site message (JSON text, for a make_site.py site or a --polygon area):
     {"v":1, "type":"site", "name", "sol", "earth_date", "center_lat", "center_lon",
      "size_m", "vertical_exaggeration", "layers":[{"name","label","credit"}, ...]}
 
@@ -39,6 +51,17 @@ Heightmap binary message layout (little-endian):
     float32   size X (m, east-west)
     float32   size Z (m, north-south)
     N*N uint16 heights, row 0 = south, last row = north
+
+Tile message (--polygon too big for one terrain), one per tile, little-endian:
+    4 bytes   magic "TILE"
+    int32 x6  ix, iz (column from west, row from south), nx, nz, count (tiles being sent), res
+    float32   min elevation (m), max elevation (m)  -- the SAME for every tile, so edges match
+    float32   tile size X (m), tile size Z (m)
+    res*res uint16 heights, row 0 = south; a tile's last row/column equals its neighbour's first
+Tile image message, right after its tile:
+    4 bytes   magic "TIMG"
+    int32 x2  ix, iz
+    rest      PNG covering exactly that tile, north up
 
 Layer image binary message (little-endian), one per site.json layer, in that order:
     4 bytes   magic "TEXL"
@@ -158,6 +181,11 @@ def build_message(grid, size_x, size_z):
 
 SITE_CSV = Path(__file__).resolve().parent / "site" / "terrain.csv"  # made by make_site.py
 
+# What `python server.py` with no arguments builds: Gale crater and around (Curiosity's
+# landing site), 257 x 184 km as 12 tiles. Points are lat,lon. Keep this text exactly as it
+# is: the cached tiles (Python/imagery_cache/, shared as a zip) are found by it.
+DEFAULT_POLYGON = "-3.797,135.484 -3.805,139.664 -6.773,139.734 -6.906,135.383"
+
 
 def load_site(csv_path):
     """make_site.py writes site.json next to terrain.csv. Returns the "site" JSON message and
@@ -214,11 +242,75 @@ def prepare_messages(csv_path, res, demo=False):
     return ([site_msg] if site_msg else []) + [build_message(grid, sx, sz)] + images
 
 
+def prepare_tiled_polygon(poly, max_tiles):
+    """Polygon too big for one terrain: site info, then TILE (+ TIMG) per tile."""
+    import dem_builder
+    t = dem_builder.build_tiles(poly, max_tiles=max_tiles)
+    lo, hi = t["lo"], t["hi"]
+    span = (hi - lo) or 1.0
+    (tx, tz), res, keys = t["tile_size"], t["res"], sorted(t["tiles"])
+    west, south, east, north = dem_builder.polygon_box(poly)
+    site = {"v": SCHEMA_VERSION, "type": "site",
+            "name": f"Polygon lon {west:.3f}..{east:.3f}, lat {south:.3f}..{north:.3f} "
+                    f"({len(keys)} tiles)",
+            "sol": 0, "earth_date": "",
+            "center_lat": t["center_lat"], "center_lon": t["center_lon"] % 360,  # = Unity origin
+            "size_m": max(t["nx"] * tx, t["nz"] * tz), "vertical_exaggeration": 1.0,
+            "layers": []}
+    msgs = [json.dumps(site)]
+    for ix, iz in keys:
+        tile = t["tiles"][(ix, iz)]
+        raw = ((tile["grid"] - lo) / span * 65535).round().astype("<u2")
+        msgs.append(b"TILE" + struct.pack("<6i4f", ix, iz, t["nx"], t["nz"], len(keys), res,
+                                          lo, hi, tx, tz) + raw.tobytes())
+        if tile["image"]:
+            msgs.append(b"TIMG" + struct.pack("<2i", ix, iz) + tile["image"])
+    print(f"Tiles: {len(keys)} x {res}x{res}, {t['nx'] * tx / 1000:.0f} x {t['nz'] * tz / 1000:.0f} km "
+          f"in total, {lo:.0f} m to {hi:.0f} m")
+    return msgs
+
+
+def prepare_polygon(text, path, res, max_tiles=16):
+    """--polygon / --polygon-file: same messages as a make_site.py site (site info, heightmap,
+    one "photo" layer), built by dem_builder.py from USGS data and cached."""
+    try:
+        import dem_builder  # needs rasterio
+        import rasterio  # noqa: F401
+    except ModuleNotFoundError as e:
+        sys.exit(f"--polygon needs {e.name}:  .venv/bin/pip install -r Python/requirements-maps.txt")
+    try:
+        poly = dem_builder.parse_polygon(text, path)
+    except (ValueError, OSError, KeyError) as e:
+        sys.exit(f"Bad polygon: {e}")
+    if not res and dem_builder.needs_tiles(poly):
+        return prepare_tiled_polygon(poly, max_tiles)
+    r = dem_builder.build(poly, max_res=res or dem_builder.MAX_RES)
+
+    west, south, east, north = r["bounds"]
+    layers, images = [], []
+    if r["image"]:
+        layers.append({"name": "photo", "label": "Satellite image",
+                       "credit": "THEMIS day IR 100 m (NASA/JPL/ASU) + CTX 6 m (NASA/JPL/MSSS), "
+                                 "heights: CTX DTMs 20 m + MOLA-HRSC 200 m (USGS)"})
+        images.append(b"TEXL" + struct.pack("<i", 5) + b"photo" + r["image"])
+    site = {"v": SCHEMA_VERSION, "type": "site",
+            "name": f"Polygon lon {west:.3f}..{east:.3f}, lat {south:.3f}..{north:.3f}",
+            "sol": 0, "earth_date": "",
+            "center_lat": (south + north) / 2, "center_lon": ((west + east) / 2) % 360,
+            "size_m": max(r["size_x"], r["size_z"]), "vertical_exaggeration": 1.0,
+            "layers": layers}
+    return [json.dumps(site), build_message(r["grid"], r["size_x"], r["size_z"])] + images
+
+
 def describe_terrain(messages):
     """e.g. 'site info + heightmap (0.53 MB) + 3 layer images (4.61 MB)'."""
     texts = [m for m in messages if isinstance(m, str)]
     hmap = [m for m in messages if isinstance(m, bytes) and m[:4] == b"HMAP"]
     imgs = [m for m in messages if isinstance(m, bytes) and m[:4] == b"TEXL"]
+    tiles = [m for m in messages if isinstance(m, bytes) and m[:4] in (b"TILE", b"TIMG")]
+    if tiles:
+        n = sum(m[:4] == b"TILE" for m in tiles)
+        return f"site info + {n} terrain tiles with images ({sum(map(len, tiles)) / 1e6:.0f} MB)"
     parts = (["site info"] if texts else []) + [f"heightmap ({sum(map(len, hmap)) / 1e6:.2f} MB)"]
     if imgs:
         parts.append(f"{len(imgs)} layer images ({sum(map(len, imgs)) / 1e6:.2f} MB)")
@@ -307,14 +399,54 @@ async def main(host, port):
 if __name__ == "__main__":
     ap = argparse.ArgumentParser(description="Martian Map WebSocket server (terrain + live data)")
     ap.add_argument("csv", nargs="?",
-                    help="lat/lon/elevation CSV: a JMARS pixel export, or omit to use "
-                         "Python/site/terrain.csv from make_site.py (demo terrain if missing)")
-    ap.add_argument("res", nargs="?", type=int, default=513, help="heightmap resolution, 2^n + 1")
+                    help="lat/lon/elevation CSV, e.g. a JMARS pixel export. With no CSV and no "
+                         "--polygon / --site / --demo: the Gale crater DEFAULT_POLYGON")
+    ap.add_argument("res", nargs="?", type=int, default=None,
+                    help="heightmap resolution, 2^n + 1 (default 513; --polygon: picked automatically)")
     ap.add_argument("--demo", action="store_true", help="use the fake demo terrain")
+    ap.add_argument("--site", action="store_true",
+                    help="the HiRISE site in Python/site/ from make_site.py (Curiosity, sol 4560)")
     ap.add_argument("--host", default="localhost")
     ap.add_argument("--port", type=int, default=8765)
-    a = ap.parse_args()
-    TERRAIN_MESSAGES = prepare_messages(a.csv, a.res, a.demo)
+    ap.add_argument("--polygon", metavar="POINTS",
+                    help="area to pull, lon,lat points: --polygon 77.3,18.3 77.6,18.3 77.6,18.6")
+    ap.add_argument("--max-tiles", type=int, default=16,
+                    help="--polygon: most Unity terrain tiles (~41 km each) for a big area")
+    ap.add_argument("--polygon-file", metavar="FILE",
+                    help="area to pull, from GeoJSON or a text file with one lon,lat per line")
+    # Let points be given without quotes: --polygon -4.0,135.7 -4.0,143.3 ...
+    # (argparse would read "-4.0,135.7" as an option name, so join them up front)
+    argv, i = sys.argv[1:], 0
+    while i < len(argv):
+        if argv[i] == "--polygon":
+            j = i + 1
+            while j < len(argv) and "," in argv[j]:
+                j += 1
+            argv[i:j] = ["--polygon=" + " ".join(argv[i + 1:j])]
+        i += 1
+    a = ap.parse_args(argv)
+    if a.site:
+        if not SITE_CSV.is_file():
+            ap.error(f"--site: {SITE_CSV} not found (run make_site.py first)")
+        a.csv = str(SITE_CSV)
+    elif not (a.csv or a.demo or a.polygon or a.polygon_file):
+        try:
+            import rasterio  # noqa: F401  (needed to build the polygon)
+            print("No arguments: building Gale crater (DEFAULT_POLYGON). Other options: --help")
+            a.polygon = DEFAULT_POLYGON
+        except ModuleNotFoundError:
+            print("No arguments, but the default Gale crater map needs rasterio "
+                  "(.venv/bin/pip install -r Python/requirements-maps.txt); using Python/site/")
+    if a.polygon or a.polygon_file:
+        if a.csv and a.csv.isdigit() and a.res is None:  # --polygon ... 2049
+            a.res, a.csv = int(a.csv), None
+        elif a.csv:
+            ap.error(f"--polygon builds its own terrain; don't also give a CSV ({a.csv})")
+        if a.max_tiles < 1:
+            ap.error("--max-tiles must be at least 1")
+        TERRAIN_MESSAGES = prepare_polygon(a.polygon, a.polygon_file, a.res, a.max_tiles)
+    else:
+        TERRAIN_MESSAGES = prepare_messages(a.csv, a.res or 513, a.demo)
     print(f"Terrain reply: {describe_terrain(TERRAIN_MESSAGES)}")
     try:
         asyncio.run(main(a.host, a.port))
