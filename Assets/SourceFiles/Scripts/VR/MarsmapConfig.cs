@@ -19,6 +19,7 @@ public static class MarsmapConfig
         public float vr_sprint_multiplier = 2f;
         public float snap_turn_degrees = 30f;
         public bool allow_jump_in_vr = false;
+        public bool ar_passthrough = false;
     }
 
     static Data data;
@@ -42,6 +43,10 @@ public static class MarsmapConfig
     public static float VrSprintMultiplier => Load().vr_sprint_multiplier;
     public static float SnapTurnDegrees => Load().snap_turn_degrees;
     public static bool AllowJumpInVR => Load().allow_jump_in_vr;
+
+    /// <summary>AR mode in a headset (ARView): the Quest's passthrough camera shows the room and
+    /// only the HUD and the EVA map are drawn. Needs the Meta XR Core SDK; VR if it can't start.</summary>
+    public static bool ArPassthrough => Load().ar_passthrough;
 
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
     static void ResetStatics() => data = null;  // re-read on every Play, even without a domain reload

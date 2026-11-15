@@ -135,6 +135,7 @@ public partial class MapView
         foreach (VRWorldTag t in pinTags) if (t != null) t.SetVisible(false);
         if (holoHomeTag != null) holoHomeTag.SetVisible(false);
         holding = dragging = false; // closed mid-drag (Menu): nothing to finish
+        ResetHands();               // ...or mid-pinch (hands)
     }
 
     void DestroyVR()
@@ -149,6 +150,9 @@ public partial class MapView
         foreach (VRWorldTag t in new[] { holoHomeTag, groundTargetTag, groundHomeTag })
             if (t != null) Destroy(t.gameObject);
         if (vrRouteLabel != null) Destroy(vrRouteLabel.gameObject);
+        if (handTag != null) Destroy(handTag.gameObject);
+        handTag = null;
+        ResetHands();
         laser = null;
         reticle = null;
         reticleRenderer = null;
@@ -513,7 +517,9 @@ public partial class MapView
         vrHelpText.resizeTextMaxSize = 19;
         vrHelpText.text = "Trigger: tap to add a waypoint, hold and drag to turn / tilt\n" +
                           "A: remove the pin you point at (laser red) · Menu: close\n" +
-                          "Right stick: turn, zoom · Left stick: move the area";
+                          "Right stick: turn, zoom · Left stick: move the area\n" +
+                          "Hands: point + pinch: add / remove (red) / press · pinch + move: turn\n" +
+                          "Two hands pinch: spread to zoom, move to slide · left palm up: close";
 
         RectTransform info = UIRect("Info", vrPanelRect);
         Stretch(info, new Vector2(PanelPad, buttonsTop + 16f + helpHeight), new Vector2(-PanelPad, -PanelPad));

@@ -284,15 +284,20 @@ public partial class MapView : MonoBehaviour
         Mouse mouse = Mouse.current;
 
         bool vr = MarsmapInput.XRActive;
+        bool handToggle = vr && HandMapGesture();   // left palm up, held (hand tracking)
         if ((kb != null && kb.mKey.wasPressedThisFrame) || MarsmapInput.MapToggle.WasPressedThisFrame()
-            || (!open && MarsmapInput.MapOpenAlt.WasPressedThisFrame()))
+            || (!open && MarsmapInput.MapOpenAlt.WasPressedThisFrame()) || handToggle)
         {
             if (open) Close();
             else Open();
         }
         if (open)
         {
-            if (openedInVR) VRControls();          // laser pointer + controller buttons
+            if (openedInVR)
+            {
+                VRControls();                      // laser pointer + controller buttons
+                if (open) HandControls();          // hand tracking: point + pinch, drag, two-hand zoom (a panel button may have closed it)
+            }
             else if (kb != null && mouse != null) HologramControls(kb, mouse);
             AnimateHologram();
         }
@@ -382,9 +387,11 @@ public partial class MapView : MonoBehaviour
         if (forward.sqrMagnitude < 1e-4f) forward = Vector3.ProjectOnPlane(eye.up, Vector3.up);
         forward.Normalize();
         Vector3 at = eye.position + forward * distance + Vector3.down * belowEyes;
-        at.y = Mathf.Max(at.y, terraingen.GroundY(at) + 0.3f); // not inside a hill in front of you
+        // Not inside a hill in front of you. In AR the hills aren't shown: keep it off the real floor.
+        float ground = ARView.Active ? ARView.FloorY(eye) : terraingen.GroundY(at);
+        at.y = Mathf.Max(at.y, ground + 0.3f);
         holoBase = at;
-        holoGroundY = terraingen.GroundY(at);
+        holoGroundY = ground;
         viewForward = forward;
         viewRight = Vector3.Cross(Vector3.up, forward);
         mapYaw = 0f; // north on the hologram = real north, so it lines up with what's around you
@@ -501,6 +508,11 @@ public partial class MapView : MonoBehaviour
 
         builtCentre = centre;
         builtRadius = radius;
+        if (holoContent != null) // undo a two-hand zoom / slide shown before this rebuild (MapViewHands)
+        {
+            holoContent.localPosition = Vector3.zero;
+            holoContent.localScale = Vector3.one;
+        }
         int n = openedInVR ? Mathf.Min(hologramResolution, vrHologramResolution) : hologramResolution;
         float step = 2f * radius / (n - 1);
         var elev = new float[n * n];

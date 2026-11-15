@@ -177,6 +177,73 @@ The big tiled Gale crater map (`server.py` with no arguments) can be exported to
 | `vr_sprint_multiplier` | 2 | Left-grip sprint multiplier in VR |
 | `snap_turn_degrees` | 30 | Right-stick snap turn |
 | `allow_jump_in_vr` | false | A button jumps |
+| `ar_passthrough` | false (true on this branch) | AR on a Quest 3: the room through the passthrough camera, with only the HUD and the EVA map drawn. See [AR mode](#ar-mode-quest-3-passthrough) |
+
+## AR mode (Quest 3 passthrough)
+
+With `"ar_passthrough": true` the headset shows your real room, and only Marsmap's UI floats in it:
+
+- **Shown:** the head-locked HUD (compass, navigation, alerts, minimap, EVA route).
+- **Shown when the map is open:** the EVA map hologram with its pins and labels, the panel beside it, and the laser.
+- **Hidden:** the Mars terrain, sky, dust, and the beams and route drawn on the ground.
+
+The EVA keeps running underneath, so the compass, waypoints and alerts work as in VR.
+
+The EVA map works exactly as in VR:
+- **Menu** on the left controller opens and closes it (or click the left stick to open).
+- Point the laser at the hologram and tap the trigger to add a waypoint.
+- Hold the trigger and drag to turn and tilt it; the right stick turns and zooms it.
+- The left stick moves the area shown.
+- The panel buttons work as in VR.
+
+In AR the hologram is kept 30 cm above your real floor, not above the hidden Mars hills.
+
+### Hands instead of controllers
+
+Put the controllers down and the Quest switches to hand tracking. This works in AR and in VR, though in VR you can't see your hands.
+
+Everything on the map works with hands:
+
+| Do | Hands |
+|---|---|
+| Open or close the map | **Left hand palm up**, fingers open, look at it and hold ~0.7 s. A tag on your palm fills up; drop the pose before it can toggle again. (Not a pinch: palm-toward-you + pinch is the Quest's own menu gesture.) |
+| Point | A laser comes out of your **right hand** (the left if the right isn't tracked), aimed from your shoulder through your knuckles, like the Quest's own hand rays |
+| Add a waypoint | Point at the hologram and **pinch** (thumb + index), then let go |
+| Remove a waypoint | Point at its pin (the laser turns red) and pinch |
+| Panel buttons | Point at one and pinch: Top-down, Centre on me, Undo, Clear, Return to Home Base, Close |
+| Turn and tilt | **Pinch and hold** with either hand, then move it: sideways turns (30 cm ≈ 90°), up or down tilts |
+| Zoom | Pinch with **both hands** and spread them apart to zoom in, or bring them together to zoom out |
+| Slide the area shown | Pinch with both hands and move them together: the terrain moves with them |
+
+A pinch you let go before the hand moves 2 cm is a tap (add, remove, press); otherwise it's a drag, like the controller trigger.
+
+The speeds are on the MapView component: `handGestureSeconds`, `handTurnDegreesPerMetre`, `handTiltDegreesPerMetre`.
+
+Hand tracking needs two settings, which the editor sets automatically (or via **Marsmap → AR: Set Up Quest Passthrough**):
+- OpenXR → Android → **Hand Tracking Subsystem** on;
+- Meta XR → Project Config → **Hand Tracking Support = Controllers And Hands**, which adds the hand-tracking permission to the manifest.
+
+Hand tracking must also be on in the headset: Settings → Movement tracking → Hand and body tracking.
+
+**How it works:**
+- `ARView.cs` starts Meta's passthrough: an `OVRManager` with Insight Passthrough on, plus an `OVRPassthroughLayer` underlay (`AR/Meta/MetaPassthrough.cs`). It uses yours if the scene already has them.
+- Every camera then clears to see-through black and draws only the UI layer. The HUD and map objects are moved onto that layer as they appear.
+- HDR is switched off on those cameras, because URP's 32-bit HDR buffer has no alpha channel.
+- **Fallback:** if passthrough can't start, the app stays in normal VR, and the log says why (`adb logcat -s Unity`, look for `[ARView]`). This happens if the SDK or a setting is missing, or the headset has no passthrough camera (on a Quest 2, AR runs with its greyscale passthrough).
+
+**Setup (once, in the editor):**
+1. `Packages/manifest.json` already lists the **Meta XR Core SDK** (`com.meta.xr.sdk.core` 207.0.1, from Meta's registry `npm.developer.oculus.com`). Unity installs it when the editor next gets focus.
+2. When it has installed, the editor sets the two required settings automatically and logs `[Marsmap AR]` in the Console:
+   - **OpenXR → Android → Meta XR Feature** on;
+   - **Meta XR → Project Config → Passthrough Support = Supported**, which adds the passthrough feature (`com.oculus.feature.PASSTHROUGH`) to the Android manifest.
+   To apply them again: **Marsmap → AR: Set Up Quest Passthrough**.
+3. If Meta's **Project Setup Tool** (Edit → Project Settings → Meta XR) lists fixes for Android, apply them.
+4. **Player Settings → Android:** Minimum API Level **32** (Meta's SDK requires it), package `com.marsmap.eva`, Internet Access **Require**. These are already set on this branch.
+5. Build and run on the Quest 3 as usual.
+
+**Testing in the editor:** on a Mac there's no Quest Link, so AR can only be tried in an APK. On desktop Play mode AR mode does nothing, and the game runs as before.
+
+The AR code only compiles when the Meta SDK is installed (`AR/Meta/*.asmdef`), so a checkout without it still builds and runs in VR.
 
 ## Troubleshooting
 
@@ -188,3 +255,5 @@ The big tiled Gale crater map (`server.py` with no arguments) can be exported to
 | Random hills instead of Mount Sharp | No server and no bundle | Run `export_offline.py` and rebuild, or check `server_url` / Wi-Fi |
 | No dust or events | EVA not started | Offline: press X. Server mode: run `feeder.py` |
 | Stutter | Quest GPU | Lower the URP render scale; turn off shadows and post-processing |
+| AR: Mars shows instead of the room | Passthrough didn't start, so it fell back to VR | Look for `[ARView] Staying in VR:` in `adb logcat -s Unity`; run **Marsmap → AR: Set Up Quest Passthrough** and rebuild |
+| AR: black instead of the room | Something draws an opaque background | Turn post-processing off on the camera; check no other camera draws to the headset |

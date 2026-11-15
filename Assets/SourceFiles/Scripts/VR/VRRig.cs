@@ -48,6 +48,10 @@ public class VRRig : MonoBehaviour
     readonly List<CanvasGroup> converted = new List<CanvasGroup>();  // the scene canvases on the HUD sheet
     bool hudHidden;
 
+    /// <summary>The "XR Rig" at the player's feet (the headset's floor), once set up; else null.</summary>
+    public static Transform Rig => current != null ? current.rig : null;
+    static VRRig current;
+
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
     static void EnsureExists()
     {
@@ -120,6 +124,7 @@ public class VRRig : MonoBehaviour
 
         // Rig at the feet; camera offset; camera driven by the headset
         rig = new GameObject("XR Rig").transform;
+        current = this;
         if (body != null)
         {
             rig.SetParent(body, false);

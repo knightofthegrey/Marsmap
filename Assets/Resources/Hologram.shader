@@ -14,7 +14,9 @@ Shader "Marsmap/Hologram"
     SubShader
     {
         Tags { "RenderType" = "Transparent" "Queue" = "Transparent" "RenderPipeline" = "UniversalPipeline" }
-        Blend SrcAlpha OneMinusSrcAlpha
+        // Colour: normal see-through blending. Alpha: "over" (not alpha squared), so in AR the
+        // passthrough compositor shows the room through it exactly as much as it's see-through.
+        Blend SrcAlpha OneMinusSrcAlpha, One OneMinusSrcAlpha
         ZWrite On
         Cull Off
 

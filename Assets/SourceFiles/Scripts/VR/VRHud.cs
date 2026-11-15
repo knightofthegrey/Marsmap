@@ -63,6 +63,9 @@ public static class VRHud
         }
     }
 
+    /// <summary>The HUD sheet if something has built it already, else null (never builds it).</summary>
+    public static RectTransform SheetIfBuilt => sheet;
+
     static void BuildSheet()
     {
         var go = new GameObject("VR HUD", typeof(RectTransform));
