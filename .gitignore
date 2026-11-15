@@ -122,3 +122,5 @@ __pycache__/
 .venv/
 __pycache__/
 Python/imagery_cache/
+
+.DS_Store

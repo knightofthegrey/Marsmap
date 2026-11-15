@@ -541,7 +541,7 @@ RectTransform:
   - {fileID: 1263194870}
   - {fileID: 1712786723}
   - {fileID: 1431420412}
-  m_Father: {fileID: 871577456}
+  m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 0}
   m_AnchorMax: {x: 0, y: 0}
@@ -580,8 +580,7 @@ Transform:
   m_LocalPosition: {x: 0, y: 0, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
-  m_Children:
-  - {fileID: 824707405}
+  m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!114 &871577457
@@ -900,7 +899,7 @@ MonoBehaviour:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1083887379}
-  m_Enabled: 1
+  m_Enabled: 0
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: fe87c0e1cc204ed48ad3b37840f39efc, type: 3}
   m_Name: 
@@ -1327,7 +1326,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 0f9d5c3695e55954f9238189362ff73a, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::GetState
-  targetTransform: {fileID: 871577456}
+  targetTransform: {fileID: 1905958449}
   angleText: {fileID: 960741377}
   coordinates: {fileID: 0}
 --- !u!1 &1367448143
@@ -2118,4 +2117,5 @@ SceneRoots:
   - {fileID: 102397990}
   - {fileID: 1135449525}
   - {fileID: 871577456}
+  - {fileID: 824707405}
   - {fileID: 1905958449}
