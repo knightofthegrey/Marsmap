@@ -158,7 +158,8 @@ flowchart TB
     T["Terrain<br/>Terrain + TerrainCollider + Terraingen"]
     P["Player<br/>CharacterController + CharacterMover + Initialize<br/>+ GetState with no label assigned, does nothing<br/>child Playercube: cube mesh + BoxCollider"]
     CAM["ccam<br/>CinemachineCamera + PanTilt + HardLockToTarget + InputAxisController"]
-    MC["Main Camera<br/>Camera + CinemachineBrain<br/>Canvas: Panel with GetState (heading, pitch, lat, lon, elevation),<br/>CompassPanel / Compass with PointAt arrows"]
+    MC["Camera 2 - the active camera, tagged MainCamera<br/>Camera + CinemachineBrain + AudioListener<br/>(the scene's 'Main Camera' object is switched off)"]
+    CV["Canvas<br/>Panel with GetState (heading, pitch, lat, lon, elevation),<br/>CompassPanel / Compass with PointAt arrows"]
     LT["Area Light - baked only, no directional sun<br/>Postprocessing volume, EventSystem"]
   end
   subgraph Runtime["Added by code when Play starts"]
@@ -307,8 +308,8 @@ Marsmap/
 │           ├── VR/                   (vr-quest) MarsmapConfig, MarsmapInput (keys + Quest buttons), VRRig (XR rig),
 │           │                         VRHud (head-locked HUD sheet), EnvironmentHUDVR, MinimapVR, MapViewVR
 │           ├── Initialize.cs         Puts the player on the ground (fallback when no Terraingen)
-│           └── CameraFollow.cs, Pickup.cs, UpdateCollectibleCount.cs, MotionAudioController.cs
-│                                     Leftovers from the Unity tutorial template; not used in the scene
+│           └── CameraFollow.cs, Pickup.cs, UpdateCollectibleCount.cs, MotionAudioController.cs, SimpleMover.cs
+│                                     Leftovers from the Unity tutorial template (SimpleMover: an empty stub); not used
 └── Python/
     ├── README.md                     How to run the Python side; data source table; demo timeline
     ├── requirements.txt              numpy, websockets (server, feeder, alerts, route planner, fetch_sol)
@@ -348,7 +349,7 @@ Marsmap/
 | `GreenScreen.cs` | Teammate | Screenshot helper | **F8** turns every camera that draws to the screen to a pure green background with nothing drawn, so only the UI shows (compass, minimap, nav panel, alerts); F8 again brings the world back. Cameras that render into a texture (the minimap) are left alone, and the dust tint is hidden. |
 | `DustStormEffect.cs` | Ours | Dust gust visuals | On `dust_gust`: orange exponential-squared fog (peak density 0.03, ground hidden past ~80 m), 42% screen tint, up to 2,200 wind-blown dust particles per second around the camera. Fades in 3 s, holds, fades out 4 s; restores the scene settings afterwards. It would also dim and warm a directional sun, but the scene has none. **G** = test. |
 | `MarsSky.cs` | Ours | Mars sky look | Builds a sky gradient texture on the built-in `Skybox/Panoramic` shader, sets warm trilight ambient and reduces sky reflections. It would also warm a directional sun, but the scene has none, so the warm look comes from the sky and ambient light alone. Restored when Play stops. |
-| `GetState.cs` | Teammate (layout by us) | Navigation readout | Heading (with N/NE/…), pitch, latitude, longitude and the ground elevation under you, from the map Python sent (a dash on the Perlin fallback). Styled top-right at startup. The copy on Main Camera > Canvas > Panel works; the copy on the Player has no label assigned and does nothing. |
+| `GetState.cs` | Teammate (layout by us) | Navigation readout | Heading (with N/NE/…), pitch, latitude, longitude and the ground elevation under you, from the map Python sent (a dash on the Perlin fallback). Styled top-right at startup. The copy on Canvas > Panel works; the copy on the Player has no label assigned and does nothing. |
 | `Compass.cs`, `PointAt.cs` | Teammates | Compass | Compass rose top-left that turns with your heading; two arrows ride round it: red = next waypoint, green = Home Base. |
 | `MapView.cs` | Teammates | EVA map and route | **M** opens a hologram of the terrain coloured by hazard zones. Drag to turn/tilt, scroll to zoom, WASD to move, click to add a waypoint, Shift+click to remove; T top-down, F centre, Backspace undo, C clear, R return to Home Base. Sends `plan_route`, draws the planned route and its numbers (distance, EVA time, climb, steepest slopes, ground by zone, hazards). On the ground: the current leg, a beam and ring at the next waypoint, Home Base's sphere and beam. |
 | `Minimap.cs` | Teammates | Minimap | Bottom-left, heading-up, shaded terrain with contours coloured by hazard zone (0–10° / 10–20 / 20–30 / >30), the route still ahead, waypoints, Home Base. **H** plain colours, **+ / −** zoom. "Upcoming hills": the elevation profile of the next stretch. |
@@ -792,8 +793,8 @@ Key: ✅ done · 🟡 partly done · ⬜ not started
 - **Standalone builds:** URP may strip fog and the panoramic sky shader. The dust tint and particles still work, and `MarsSky` falls back to a solid sky colour.
 - **`Terraingen` default exaggeration:** 5× (meant for large JMARS areas). The HiRISE site overrides it to 1×. A JMARS CSV without `site.json` still uses 5×.
 - **Late server:** if the heightmap doesn't arrive within 5 s, Play has to be restarted to get the real terrain.
-- **Unused files:** template leftovers (`CameraFollow`, `Pickup`, `UpdateCollectibleCount`, `MotionAudioController`) are in the scripts folder; `New Terrain.asset` is no longer used by the runtime terrain; the Player's `GetState` has no label.
-- **Warnings:** Unity 6 CS0618 "obsolete" warnings for `FindFirstObjectByType` in `Terraingen.cs` (2 places) and `Initialize.cs`. Harmless; `FindAnyObjectByType` removes them.
+- **Unused files:** template leftovers (`CameraFollow`, `Pickup`, `UpdateCollectibleCount`, `MotionAudioController`) and an empty `SimpleMover` stub are in the scripts folder; `New Terrain.asset` is no longer used by the runtime terrain; the Player's `GetState` has no label.
+- **Warnings:** Unity 6 CS0618 "obsolete" warnings for `FindFirstObjectByType` in `Initialize.cs`. Harmless; `FindAnyObjectByType` removes them.
 
 **Repository / team**
 - **Branches:** `vr-quest` is the final, demoed state. `main` and `DataSetIntegration` hold earlier states (`DataSetIntegration` was merged into `main` as PR #3); they don't have the VR HUD rework or the Quest 3 build settings.

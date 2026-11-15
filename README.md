@@ -167,7 +167,7 @@ flowchart LR
 - **Unity** builds the terrain at runtime and draws the HUD.
   - **In a headset,** the same scene switches to VR by itself.
   - **In AR mode,** the terrain stays loaded (for the map and readouts) but isn't drawn, so the passthrough room shows behind the HUD.
-- **For the headset,** `Python/export_offline.py` packs the server's messages into the app, for offline use.
+- **For the headset** *(vr-quest)*, `Python/export_offline.py` packs the server's messages into the app, for offline use.
 
 ### Repo map
 
