@@ -1,24 +1,184 @@
 using UnityEngine;
+using UnityEngine.Rendering;
 using UnityEngine.UI;
 
 /// <summary>
-/// HUD pieces that float in front of the eyes in a headset. IMGUI (OnGUI) and Screen Space
-/// canvases are not drawn inside a headset, so VR needs world-space versions that follow
-/// the camera. Both kinds re-attach themselves if Camera.main changes and never throw when
-/// there is no camera yet.
+/// HUD pieces for a headset. IMGUI (OnGUI) and Screen Space canvases are not drawn inside a
+/// headset, so VR needs world-space versions.
+///
+/// THE HUD SHEET (VRHud.Sheet): one head-locked world-space canvas 1.5 m ahead, ±25° wide,
+/// 16:9. It's laid out in the same "desktop units" as the scene's Canvas (reference 800x600,
+/// matched on width: 800 units across), so anything anchored top-right on desktop is anchored
+/// top-right here too, and the VR layout matches the desktop one:
+///
+///    compass (top-left)        alerts (top centre)        navigation + environment (top-right)
+///
+///                          (centre kept clear for walking)
+///
+///    layer label (left, above the minimap)
+///    minimap + upcoming hills (bottom-left)                      EVA route (bottom-right)
+///
+/// Scale: 1 unit ≈ 1.75 mm at 1.5 m ≈ 0.067°. Font sizes for a Quest: 15 titles, 13 body,
+/// 11 the smallest (smaller is hard to read in a headset). Everything on the sheet draws on top
+/// of the world (terrain never hides it) and of the dust tint.
+///
+/// Also here: a full-view tint (dust), and text tags that sit at a point in the world.
+/// All of them re-attach themselves if Camera.main changes and never throw without a camera.
 /// </summary>
 public static class VRHud
 {
-    public const float LabelDistance = 1.2f;   // metres in front of the eyes
-    const float PixelsPerMetre = 1000f;        // canvas units per metre (sizes below are in "pixels")
+    public const float SheetDistance = 1.5f;     // metres in front of the eyes
+    public const float SheetHalfAngle = 25f;     // degrees from the view centre to the left/right edge
+    public const float SheetUnitsWide = 800f;    // the scene Canvas's reference width
+    public const float SheetUnitsHigh = 450f;    // 16:9
+    public const int SheetSortingOrder = 100;    // above world tags (90), the hologram's panel (60), dust
 
-    /// <summary>A text panel. viewOffset = metres right/up of the view centre at 1.2 m,
-    /// e.g. (-0.35, -0.28) = lower-left.</summary>
-    public static VRHudLabel CreateLabel(string name, Vector2 viewOffset, float widthMeters = 0.8f)
+    // Font sizes in sheet units (see the class comment)
+    public const int TitleFont = 15, BodyFont = 13, SmallFont = 11;
+
+    /// <summary>Background of the desktop panels (dark, warm, see-through).</summary>
+    public static readonly Color PanelColor = new Color(0.06f, 0.035f, 0.025f, 0.8f);
+
+    public static float SheetWidthMetres => 2f * SheetDistance * Mathf.Tan(SheetHalfAngle * Mathf.Deg2Rad);
+    public static float MetresPerUnit => SheetWidthMetres / SheetUnitsWide;
+
+    static RectTransform sheet;
+    static Material onTop;
+
+    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+    static void ResetStatics()
+    {
+        sheet = null;
+        onTop = null;
+    }
+
+    /// <summary>The head-locked HUD canvas (created on first use; only use it in a headset).
+    /// Children are RectTransforms in sheet units: anchor them like on the desktop Canvas.</summary>
+    public static RectTransform Sheet
+    {
+        get
+        {
+            if (sheet == null) BuildSheet();
+            return sheet;
+        }
+    }
+
+    static void BuildSheet()
+    {
+        var go = new GameObject("VR HUD", typeof(RectTransform));
+        var canvas = go.AddComponent<Canvas>();
+        canvas.renderMode = RenderMode.WorldSpace;
+        canvas.sortingOrder = SheetSortingOrder;
+        // World-space canvases rasterise text at fontSize x this: 4 keeps 11-15 unit text sharp
+        var scaler = go.AddComponent<CanvasScaler>();
+        scaler.dynamicPixelsPerUnit = 4f;
+        sheet = (RectTransform)go.transform;
+        sheet.anchorMin = sheet.anchorMax = sheet.pivot = new Vector2(0.5f, 0.5f);
+        sheet.sizeDelta = new Vector2(SheetUnitsWide, SheetUnitsHigh);
+        sheet.localScale = Vector3.one * MetresPerUnit;
+        go.AddComponent<VRHudSheet>().Attach();
+    }
+
+    // ---------------------------------------------------------------
+    // Building blocks for the sheet
+    // ---------------------------------------------------------------
+
+    /// <summary>A panel on the sheet. anchor = where on the sheet (0,0 bottom-left .. 1,1 top-right),
+    /// also used as the pivot so the panel grows away from that edge/corner; anchoredPos and
+    /// size in sheet units (like a desktop panel's).</summary>
+    public static RectTransform AddPanel(string name, Vector2 anchor, Vector2 anchoredPos, Vector2 size)
+    {
+        RectTransform rt = NewRect(name, Sheet);
+        rt.anchorMin = rt.anchorMax = rt.pivot = anchor;
+        rt.anchoredPosition = anchoredPos;
+        rt.sizeDelta = size;
+        return rt;
+    }
+
+    public static RectTransform NewRect(string name, Transform parent)
     {
         var go = new GameObject(name, typeof(RectTransform));
-        var label = go.AddComponent<VRHudLabel>();
-        label.Build(viewOffset, widthMeters);
+        go.layer = parent != null ? parent.gameObject.layer : go.layer;
+        var rt = (RectTransform)go.transform;
+        rt.SetParent(parent, false);
+        return rt;
+    }
+
+    /// <summary>Text on the sheet: legacy font, rich text, wraps, drawn on top, no raycasts.</summary>
+    public static Text AddText(Transform parent, string name, int size, FontStyle style = FontStyle.Normal,
+                               TextAnchor anchor = TextAnchor.UpperLeft)
+    {
+        Text t = NewRect(name, parent).gameObject.AddComponent<Text>();
+        t.font = BuiltinFont();
+        t.fontSize = size;
+        t.fontStyle = style;
+        t.color = Color.white;
+        t.alignment = anchor;
+        t.supportRichText = true;
+        t.horizontalOverflow = HorizontalWrapMode.Wrap;
+        t.verticalOverflow = VerticalWrapMode.Overflow;
+        t.raycastTarget = false;
+        OnTop(t);
+        return t;
+    }
+
+    /// <summary>A plain coloured rectangle, drawn on top, no raycasts.</summary>
+    public static Image AddImage(Transform parent, string name, Color color)
+    {
+        Image img = NewRect(name, parent).gameObject.AddComponent<Image>();
+        img.color = color;
+        img.raycastTarget = false;
+        OnTop(img);
+        return img;
+    }
+
+    /// <summary>Stretch a RectTransform over its parent, with padding (left/bottom, right/top).</summary>
+    public static void Stretch(RectTransform rt, Vector2 offsetMin, Vector2 offsetMax)
+    {
+        rt.anchorMin = Vector2.zero;
+        rt.anchorMax = Vector2.one;
+        rt.pivot = new Vector2(0.5f, 0.5f);
+        rt.offsetMin = offsetMin;
+        rt.offsetMax = offsetMax;
+    }
+
+    /// <summary>Draw this UI graphic on top of the world: nearby terrain (walking up a slope,
+    /// looking down) would otherwise cut through a HUD 1.5 m away.</summary>
+    public static void OnTop(Graphic g)
+    {
+        if (g == null) return;
+        if (onTop == null)
+        {
+            onTop = new Material(Canvas.GetDefaultCanvasMaterial()) { name = "VR HUD (on top)" };
+            onTop.SetInt("unity_GUIZTestMode", (int)CompareFunction.Always);
+        }
+        g.material = onTop;
+    }
+
+    /// <summary>Where a UI element is on the sheet, in sheet units with (0,0) at the sheet's
+    /// centre; Rect.zero if there's no sheet or it isn't on it (e.g. switched off).</summary>
+    public static Rect SheetRectOf(RectTransform rt)
+    {
+        if (sheet == null || rt == null || !rt.gameObject.activeInHierarchy || !rt.IsChildOf(sheet)) return Rect.zero;
+        var corners = new Vector3[4];
+        rt.GetWorldCorners(corners);
+        Vector2 lo = sheet.InverseTransformPoint(corners[0]); // bottom-left
+        Vector2 hi = sheet.InverseTransformPoint(corners[2]); // top-right
+        return Rect.MinMaxRect(Mathf.Min(lo.x, hi.x), Mathf.Min(lo.y, hi.y), Mathf.Max(lo.x, hi.x), Mathf.Max(lo.y, hi.y));
+    }
+
+    // ---------------------------------------------------------------
+    // Ready-made pieces
+    // ---------------------------------------------------------------
+
+    /// <summary>A text panel on the sheet (bold title + smaller detail lines), as tall as its text.
+    /// anchor = where on the sheet (e.g. (0,0) bottom-left, (1,0) bottom-right); anchoredPos and
+    /// widthUnits in sheet units.</summary>
+    public static VRHudLabel CreateLabel(string name, Vector2 anchor, Vector2 anchoredPos, float widthUnits)
+    {
+        RectTransform rt = AddPanel(name, anchor, anchoredPos, new Vector2(widthUnits, 40f));
+        var label = rt.gameObject.AddComponent<VRHudLabel>();
+        label.Build();
         return label;
     }
 
@@ -65,83 +225,74 @@ public static class VRHud
         return true;
     }
 
-    internal static float CanvasScale => 1f / PixelsPerMetre;
-    internal static float Pixels(float metres) => metres * PixelsPerMetre;
+    internal static float CanvasScale => 1f / 1000f;     // VRWorldTag: canvas units per metre
 }
 
-public class VRHudLabel : MonoBehaviour
+/// <summary>Keeps the HUD sheet 1.5 m in front of the eyes.</summary>
+public class VRHudSheet : MonoBehaviour
 {
-    Vector2 offset;
-    Text title, detail;
-    Canvas canvas;
     Camera attached;
 
-    internal void Build(Vector2 viewOffset, float widthMeters)
-    {
-        offset = viewOffset;
-        canvas = gameObject.AddComponent<Canvas>();
-        canvas.renderMode = RenderMode.WorldSpace;
-        canvas.sortingOrder = 100;
-        var rt = (RectTransform)transform;
-        float w = VRHud.Pixels(widthMeters), h = VRHud.Pixels(0.2f);
-        rt.sizeDelta = new Vector2(w, h);
-        rt.localScale = Vector3.one * VRHud.CanvasScale;
-
-        var bg = new GameObject("Background", typeof(RectTransform), typeof(Image));
-        bg.transform.SetParent(transform, false);
-        Stretch((RectTransform)bg.transform, 0f);
-        bg.GetComponent<Image>().color = new Color(0f, 0f, 0f, 0.65f);
-
-        title = MakeText("Title", 40, FontStyle.Bold, Color.white, new Vector2(0f, 0.55f), new Vector2(1f, 1f));
-        detail = MakeText("Detail", 26, FontStyle.Normal, new Color(0.85f, 0.85f, 0.85f),
-                          new Vector2(0f, 0f), new Vector2(1f, 0.55f));
-        Follow();
-    }
-
-    Text MakeText(string name, int size, FontStyle style, Color color, Vector2 anchorMin, Vector2 anchorMax)
-    {
-        var go = new GameObject(name, typeof(RectTransform), typeof(Text));
-        go.transform.SetParent(transform, false);
-        var rt = (RectTransform)go.transform;
-        rt.anchorMin = anchorMin;
-        rt.anchorMax = anchorMax;
-        rt.offsetMin = new Vector2(16f, 4f);
-        rt.offsetMax = new Vector2(-16f, -4f);
-        var t = go.GetComponent<Text>();
-        t.font = VRHud.BuiltinFont();
-        t.fontSize = size;
-        t.fontStyle = style;
-        t.color = color;
-        t.alignment = TextAnchor.MiddleLeft;
-        t.horizontalOverflow = HorizontalWrapMode.Wrap;
-        t.verticalOverflow = VerticalWrapMode.Truncate;
-        t.resizeTextForBestFit = true;  // long credits shrink instead of being cut off
-        t.resizeTextMinSize = 14;
-        t.resizeTextMaxSize = size;
-        return t;
-    }
-
-    static void Stretch(RectTransform rt, float pad)
-    {
-        rt.anchorMin = Vector2.zero;
-        rt.anchorMax = Vector2.one;
-        rt.offsetMin = new Vector2(pad, pad);
-        rt.offsetMax = new Vector2(-pad, -pad);
-    }
-
-    void Follow() => VRHud.Follow(transform, new Vector3(offset.x, offset.y, VRHud.LabelDistance), ref attached);
+    internal void Attach() => Follow();
 
     void LateUpdate() => Follow();
 
+    void Follow() => VRHud.Follow(transform, new Vector3(0f, 0f, VRHud.SheetDistance), ref attached);
+}
+
+/// <summary>A panel on the HUD sheet: bold title, smaller detail lines below it; as tall as its
+/// text (it grows away from the sheet edge it's anchored to).</summary>
+public class VRHudLabel : MonoBehaviour
+{
+    Text title, detail;
+    RectTransform rect;
+
+    public RectTransform Rect => rect;
+
+    internal void Build()
+    {
+        rect = (RectTransform)transform;
+        Image bg = gameObject.AddComponent<Image>();
+        bg.color = VRHud.PanelColor;
+        bg.raycastTarget = false;
+        VRHud.OnTop(bg);
+
+        var layout = gameObject.AddComponent<VerticalLayoutGroup>();
+        layout.padding = new RectOffset(8, 8, 5, 6);
+        layout.spacing = 1f;
+        layout.childControlWidth = layout.childControlHeight = true;
+        layout.childForceExpandWidth = true;
+        layout.childForceExpandHeight = false;
+        var fit = gameObject.AddComponent<ContentSizeFitter>();
+        fit.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+
+        title = VRHud.AddText(transform, "Title", VRHud.BodyFont + 1, FontStyle.Bold);
+        detail = VRHud.AddText(transform, "Detail", VRHud.SmallFont);
+        detail.color = new Color(0.85f, 0.85f, 0.85f);
+    }
+
     public void Set(string titleText, string detailText)
     {
-        if (title != null) title.text = titleText ?? "";
-        if (detail != null) detail.text = detailText ?? "";
+        titleText = titleText ?? "";
+        detailText = detailText ?? "";
+        if (title != null && title.text != titleText) title.text = titleText;
+        if (detail != null)
+        {
+            if (detail.text != detailText) detail.text = detailText;
+            bool show = detailText.Length > 0;
+            if (detail.gameObject.activeSelf != show) detail.gameObject.SetActive(show);
+        }
     }
 
     public void SetVisible(bool visible)
     {
-        if (canvas != null) canvas.enabled = visible;
+        if (gameObject.activeSelf != visible) gameObject.SetActive(visible);
+    }
+
+    /// <summary>Move it (sheet units, from its anchor), e.g. to sit above the minimap.</summary>
+    public void SetPosition(Vector2 anchoredPos)
+    {
+        if (rect != null && rect.anchoredPosition != anchoredPos) rect.anchoredPosition = anchoredPos;
     }
 }
 
@@ -163,10 +314,10 @@ public class VRHudTint : MonoBehaviour
         Shader shader = Shader.Find("Sprites/Default");     // transparent, vertex colour, works in URP
         if (shader != null)
         {
-            material = new Material(shader) { renderQueue = 4000 };  // drawn after everything else
+            material = new Material(shader) { renderQueue = 4000 };  // drawn after the world
             quad.sharedMaterial = material;
         }
-        quad.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+        quad.shadowCastingMode = ShadowCastingMode.Off;
         quad.receiveShadows = false;
         SetColor(Color.clear);
         VRHud.Follow(transform, new Vector3(0f, 0f, Distance), ref attached);

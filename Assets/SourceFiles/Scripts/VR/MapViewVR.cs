@@ -10,13 +10,21 @@ using UnityEngine.UI;
 ///
 ///   Open / close the map    Menu button (left controller); clicking the left stick also opens it
 ///   Point                   the right controller casts a laser; a dot shows where it lands
-///   Add a waypoint          point at the hologram and pull the right trigger
+///   Add a waypoint          point at the hologram and tap the right trigger (pull and let go)
+///   Turn / tilt             point at the hologram, hold the trigger and drag: sweep the laser
+///                           sideways to turn it, up / down to tilt it (like the mouse on desktop)
 ///   Remove a waypoint       point at its pin (the laser turns red) and press A
-///   Turn / tilt             hold the right grip and move your hand sideways / up and down
 ///   Turn / zoom             right stick left-right / up-down
 ///   Move the area shown     left stick
 ///   Panel buttons           point and pull the trigger: Top-down, Centre on me, Undo, Clear,
 ///                           Return to Home Base on/off, Close
+///
+/// Tap or drag is told apart like a mouse click on desktop: once the laser has turned more than
+/// 2.5 degrees (or where it lands slid 3 cm sideways) since you pulled the trigger it's a drag;
+/// let go before that and it was a tap, which adds the waypoint where the laser was when you
+/// pulled (so a small wobble as you let go doesn't move it). While dragging, every degree the
+/// laser sweeps turns / tilts the hologram vrDragGain degrees (3: a 30 degree flick of the wrist
+/// turns it 90), and the part you grabbed follows the laser, like turning a table top by hand.
 ///
 /// IMGUI (OnGUI) isn't drawn in a headset, so here the panel beside the hologram (route numbers
 /// and help), the pin numbers, the next-waypoint and Home Base tags on the ground and the route
@@ -33,8 +41,9 @@ public partial class MapView
     [Range(33, 257)] public int vrHologramResolution = 97;
     [Tooltip("Longest reach of the laser (m)")]
     public float vrLaserLength = 5f;
-    [Tooltip("Degrees the hologram turns / tilts per metre your hand moves while holding the grip")]
-    public float vrGrabDegreesPerMetre = 250f;
+    [Tooltip("Degrees the hologram turns / tilts per degree you sweep the laser while dragging " +
+             "(trigger held): 3 = a 30 degree flick of the wrist turns it 90")]
+    public float vrDragGain = 3f;
 
     static readonly Color LaserColor = new Color(0.25f, 0.95f, 1f);
     static readonly Color LaserRemoveColor = new Color(1f, 0.3f, 0.25f);
@@ -44,6 +53,11 @@ public partial class MapView
     const float PanelWidth = 560f, PanelHeight = 800f, PanelPixelsPerMetre = 1000f; // 0.56 x 0.8 m
     const float ButtonHeight = 66f, ButtonGap = 10f, PanelPad = 18f;
     const int VRFontSize = 24;
+    // A trigger press becomes a drag once the laser turns this far, or where it lands slides this
+    // far sideways (the desktop's 6 pixels; a hand is shakier than a mouse, and pulling the
+    // trigger jolts it)
+    const float DragStartDegrees = 2.5f, DragStartMetres = 0.03f;
+    const float RouteLabelWidth = 210f; // the route summary in the corner of your view (sheet units)
 
     bool openedInVR;              // this opening is driven by the controllers, not mouse + keys
     float belowEyes = 0.45f;      // the hologram's height below the eyes for this opening
@@ -61,9 +75,16 @@ public partial class MapView
     string vrPanelShown;
     readonly List<VRButton> vrButtons = new List<VRButton>();
 
-    // ---- grip-drag, stick zoom
-    bool grabbing;
-    Vector3 grabLast;
+    // ---- trigger held: tap or drag
+    bool holding;                 // the trigger went down off the panel and pins, and is still down
+    bool dragging;                // ...and the laser has moved enough since: it's turning the hologram
+    Ray pressRay;                 // the laser when the trigger went down (a tap adds the waypoint here)
+    Vector3 dragLast;             // the laser's direction last frame
+    bool dragLastValid;           // false after the controller lost tracking: don't jump
+    float dragTurnSign = -1f;     // +1 / -1: which way to turn so the part you grabbed follows
+    float grabDistance;           // how far along the laser you grabbed (drawn that long off the hologram)
+
+    // ---- stick zoom
     int zoomDir;
     float zoomRepeatAt;
 
@@ -101,7 +122,7 @@ public partial class MapView
         vrPanel.transform.SetPositionAndRotation(at, Quaternion.LookRotation(look.sqrMagnitude > 1e-4f ? look : viewForward, Vector3.up));
         vrPanel.SetActive(true);
         vrPanelShown = null;
-        grabbing = false;
+        holding = dragging = false; // a trigger still held from before doesn't count as a press
         zoomDir = 0;
         EnsureLaser();
     }
@@ -113,7 +134,7 @@ public partial class MapView
         if (reticle != null) reticle.gameObject.SetActive(false);
         foreach (VRWorldTag t in pinTags) if (t != null) t.SetVisible(false);
         if (holoHomeTag != null) holoHomeTag.SetVisible(false);
-        grabbing = false;
+        holding = dragging = false; // closed mid-drag (Menu): nothing to finish
     }
 
     void DestroyVR()
@@ -145,72 +166,83 @@ public partial class MapView
     {
         float dt = Time.unscaledDeltaTime;
         Physics.SyncTransforms(); // the hologram's collider where it's drawn (it may be turning)
-
-        // What the laser is on: a panel button, the panel, the hologram (whichever is nearer)
         bool haveRay = TryGetHandRay(out Ray ray);
-        int button = -1;
-        float panelDistance = float.PositiveInfinity;
-        RaycastHit hit = default;
-        bool onHolo = false;
-        if (haveRay)
-        {
-            button = PanelHit(ray, out panelDistance);
-            onHolo = holoCollider != null && holoCollider.Raycast(ray, out hit, vrLaserLength)
-                     && hit.distance < panelDistance;
-        }
-        // A pin the laser passes close to, nearer than what it lands on (pins have no colliders,
-        // and the laser comes in low: aiming at a pin it lands on the terrain well behind it)
-        float nearest = Mathf.Min(onHolo ? hit.distance : vrLaserLength, panelDistance);
-        float pinDistance = 0f;
-        int pin = haveRay ? PinOnRay(ray, nearest, out pinDistance) : -1;
-        if (pin >= 0)
-        {
-            onHolo = false;
-            button = -1;
-        }
-        bool onPanel = haveRay && pin < 0 && !onHolo && button != -1;
-        if (!onPanel) button = -1;
-        float length = pin >= 0 ? pinDistance : onHolo ? hit.distance : onPanel ? panelDistance : vrLaserLength;
-        ShowLaser(haveRay, ray, length, onHolo || onPanel || pin >= 0, pin >= 0);
-        UpdateButtons(button);
 
-        // Trigger: press a button, or drop a waypoint where the laser lands
-        if (MarsmapInput.MapSelect.WasPressedThisFrame())
+        // Trigger let go: if the laser never moved enough to count as a drag it was a tap, which
+        // adds a waypoint where the laser was when the trigger went down (like a desktop click)
+        if (holding && !MarsmapInput.MapSelect.IsPressed())
         {
-            if (onPanel)
+            holding = false;
+            if (!dragging) AddWaypointAt(pressRay);
+            dragging = false;
+        }
+
+        if (holding)
+        {
+            // Trigger still held: dragging turns / tilts the hologram, even after the laser has
+            // slid off it. The laser stays on the hologram (or as long as where you grabbed it),
+            // its dot a bit bigger while dragging; the buttons and pins are left alone meanwhile.
+            if (haveRay) DragHologram(ray);
+            else dragLastValid = false; // lost tracking: carry on from wherever it comes back
+            float reach = grabDistance;
+            RaycastHit now = default;
+            bool onHoloNow = haveRay && holoCollider != null && holoCollider.Raycast(ray, out now, vrLaserLength);
+            if (onHoloNow) reach = now.distance;
+            ShowLaser(haveRay, ray, reach, onHoloNow || dragging, false, dragging);
+            UpdateButtons(-1);
+        }
+        else
+        {
+            // What the laser is on: a panel button, the panel, the hologram (whichever is nearer)
+            int button = -1;
+            float panelDistance = float.PositiveInfinity;
+            RaycastHit hit = default;
+            bool onHolo = false;
+            if (haveRay)
             {
-                if (button >= 0)
+                button = PanelHit(ray, out panelDistance);
+                onHolo = holoCollider != null && holoCollider.Raycast(ray, out hit, vrLaserLength)
+                         && hit.distance < panelDistance;
+            }
+            // A pin the laser passes close to, nearer than what it lands on (pins have no colliders,
+            // and the laser comes in low: aiming at a pin it lands on the terrain well behind it)
+            float nearest = Mathf.Min(onHolo ? hit.distance : vrLaserLength, panelDistance);
+            float pinDistance = 0f;
+            int pin = haveRay ? PinOnRay(ray, nearest, out pinDistance) : -1;
+            if (pin >= 0)
+            {
+                onHolo = false;
+                button = -1;
+            }
+            bool onPanel = haveRay && pin < 0 && !onHolo && button != -1;
+            if (!onPanel) button = -1;
+            float length = pin >= 0 ? pinDistance : onHolo ? hit.distance : onPanel ? panelDistance : vrLaserLength;
+            ShowLaser(haveRay, ray, length, onHolo || onPanel || pin >= 0, pin >= 0, false);
+            UpdateButtons(button);
+
+            // Trigger down: a panel button acts at once; anywhere else it's a tap (waypoint, when
+            // you let go) or the start of a drag. Off the hologram a tap only says where to point,
+            // but a drag still turns it (like the mouse on desktop).
+            if (MarsmapInput.MapSelect.WasPressedThisFrame())
+            {
+                if (onPanel)
                 {
-                    vrButtons[button].press();
-                    return; // "Close map" may have closed it
+                    if (button >= 0)
+                    {
+                        vrButtons[button].press();
+                        return; // "Close map" may have closed it
+                    }
                 }
+                else if (pin >= 0) status = $"That's waypoint {pin + 1}: press A to remove it, or point at open ground to add one.";
+                else if (haveRay) BeginHold(ray, onHolo, hit);
             }
-            else if (onHolo) AddWaypointAt(ray);
-            else if (pin >= 0) status = $"That's waypoint {pin + 1}: press A to remove it, or point at open ground to add one.";
-            else if (haveRay) status = "Point the laser at the hologram to add a waypoint.";
-        }
-        // A: remove the waypoint whose pin you point at
-        if (MarsmapInput.MapRemove.WasPressedThisFrame())
-        {
-            if (pin >= 0) RemoveWaypoint(pin);
-            else if (waypoints.Count > 0) status = "Point at a waypoint's pin (the laser turns red) and press A to remove it.";
-        }
-
-        // Grip held: move your hand sideways to turn the hologram, up/down to tilt it
-        if (haveRay && MarsmapInput.MapGrab.IsPressed())
-        {
-            if (grabbing)
+            // A: remove the waypoint whose pin you point at
+            if (MarsmapInput.MapRemove.WasPressedThisFrame())
             {
-                Vector3 d = ray.origin - grabLast;
-                mapYaw -= Vector3.Dot(d, viewRight) * vrGrabDegreesPerMetre;
-                tilt = Mathf.Clamp(tilt + d.y * vrGrabDegreesPerMetre, 0f, 90f);
-                tiltTarget = -1f;
-                yawTarget = float.NaN;
+                if (pin >= 0) RemoveWaypoint(pin);
+                else if (waypoints.Count > 0) status = "Point at a waypoint's pin (the laser turns red) and press A to remove it.";
             }
-            grabbing = true;
-            grabLast = ray.origin;
         }
-        else grabbing = false;
 
         // Right stick: left/right turns it smoothly, up/down zooms in steps (held: repeats)
         Vector2 rs = MarsmapInput.Turn.ReadValue<Vector2>();
@@ -234,6 +266,84 @@ public partial class MapView
         // Left stick: move the area shown (walking is locked while the map is open)
         Vector2 ls = MarsmapInput.LeftStick.ReadValue<Vector2>();
         if (ls.sqrMagnitude > 0.04f) MoveArea(Vector2.ClampMagnitude(ls, 1f) * (radius * 0.8f * dt));
+    }
+
+    // The trigger went down (not on the panel or a pin): remember the laser, so letting go
+    // without dragging adds the waypoint right there, and work out which way a drag turns it
+    void BeginHold(Ray ray, bool onHolo, RaycastHit hit)
+    {
+        holding = true;
+        dragging = false;
+        pressRay = ray;
+        dragLast = ray.direction;
+        dragLastValid = true;
+        Vector3 pivot = holoRoot != null ? holoRoot.transform.position : ray.origin + ray.direction;
+        grabDistance = onHolo ? hit.distance : Mathf.Min(vrLaserLength, Vector3.Distance(ray.origin, pivot));
+
+        // Turning the hologram (mapYaw up by d degrees) spins it about its own up axis, which
+        // moves a point r away from its centre by d * (up x r): with it lying flat, the far half
+        // goes right and the near half left; standing up, the top goes right (clockwise). The
+        // laser sweeping right should take the part you grabbed right with it, so the turn's
+        // sign is whichever way that point moves right as seen along the laser. Grabbed near the
+        // middle (or off the hologram) use the desktop's: the near half follows (drag right,
+        // mapYaw down).
+        dragTurnSign = -1f;
+        if (onHolo && holoRoot != null)
+        {
+            Vector3 right = Vector3.Cross(Vector3.up, ray.direction); // the laser's right, level
+            if (right.sqrMagnitude > 1e-4f)
+            {
+                float follows = Vector3.Dot(Vector3.Cross(holoRoot.transform.up, hit.point - pivot), right.normalized);
+                if (Mathf.Abs(follows) > 0.05f * hologramSize) dragTurnSign = Mathf.Sign(follows);
+            }
+        }
+    }
+
+    // Trigger held: once the laser has moved enough it's a drag, and then every frame the
+    // laser's sweep turns and tilts the hologram, the way the mouse does on desktop:
+    //   sideways: degrees the laser turned left/right (its compass heading change, times the
+    //             cosine of how far it points down, so pointing steeply down doesn't exaggerate
+    //             it) x vrDragGain, signed so the part you grabbed follows (see BeginHold)
+    //   up/down:  degrees the laser rose x vrDragGain onto tilt (0 flat .. 90 standing up):
+    //             raising the laser lifts the far edge toward you, lowering it lays it back down
+    // and, like a desktop drag, it cancels the T / Top-down swing in progress.
+    void DragHologram(Ray ray)
+    {
+        Vector3 dir = ray.direction;
+        if (!dragging && (Vector3.Angle(pressRay.direction, dir) > DragStartDegrees || SlidSideways(ray)))
+            dragging = true;
+        if (dragging && dragLastValid)
+        {
+            LaserAngles(dragLast, out float heading0, out float pitch0);
+            LaserAngles(dir, out float heading1, out float pitch1);
+            float sideways = Mathf.DeltaAngle(heading0, heading1) * Mathf.Cos(pitch1 * Mathf.Deg2Rad); // + = to the right
+            float upwards = pitch1 - pitch0;                                                         // + = up
+            mapYaw += dragTurnSign * sideways * vrDragGain;
+            tilt = Mathf.Clamp(tilt + upwards * vrDragGain, 0f, 90f);
+            tiltTarget = -1f;
+            yawTarget = float.NaN;
+        }
+        dragLast = dir;
+        dragLastValid = true;
+    }
+
+    // Has the spot the laser lands on (as far along it as where you grabbed) slid sideways more
+    // than DragStartMetres since the press? Moving the hand along the laser (the little push
+    // that often comes with pulling a trigger) doesn't count: that would end a tap without
+    // turning anything (a drag only follows the laser's direction).
+    bool SlidSideways(Ray ray)
+    {
+        Vector3 moved = ray.GetPoint(grabDistance) - pressRay.GetPoint(grabDistance);
+        Vector3 across = moved - Vector3.Dot(moved, ray.direction) * ray.direction;
+        return across.sqrMagnitude > DragStartMetres * DragStartMetres;
+    }
+
+    // A direction's compass heading (degrees, + = clockwise seen from above, i.e. turning right)
+    // and pitch (degrees, + = up)
+    static void LaserAngles(Vector3 dir, out float heading, out float pitch)
+    {
+        heading = Mathf.Atan2(dir.x, dir.z) * Mathf.Rad2Deg;
+        pitch = Mathf.Asin(Mathf.Clamp(dir.y, -1f, 1f)) * Mathf.Rad2Deg;
     }
 
     // The right controller's pointing ray in the world, or false while it isn't tracked
@@ -349,7 +459,8 @@ public partial class MapView
         dot.SetActive(false);
     }
 
-    void ShowLaser(bool on, Ray ray, float length, bool hitting, bool removing)
+    // hitting: show the dot at the end; removing: red (on a pin); bigDot: dragging the hologram
+    void ShowLaser(bool on, Ray ray, float length, bool hitting, bool removing, bool bigDot)
     {
         EnsureLaser();
         laser.gameObject.SetActive(on);
@@ -362,7 +473,8 @@ public partial class MapView
         if (laser.sharedMaterial != m) laser.sharedMaterial = m;
         if (reticleRenderer.sharedMaterial != m) reticleRenderer.sharedMaterial = m;
         reticle.position = end;
-        reticle.localScale = Vector3.one * (0.01f + 0.004f * length); // about the same size at any distance
+        reticle.localScale = Vector3.one * ((0.01f + 0.004f * length) // about the same size at any distance
+                                            * (bigDot ? 1.7f : 1f));    // "holding on" while dragging
     }
 
     // ---------------------------------------------------------------
@@ -399,9 +511,9 @@ public partial class MapView
         vrHelpText.resizeTextForBestFit = true;
         vrHelpText.resizeTextMinSize = 12;
         vrHelpText.resizeTextMaxSize = 19;
-        vrHelpText.text = "Trigger: add a waypoint · A: remove the pin you point at (laser red)\n" +
-                          "Grip + move your hand: turn / tilt · Right stick: turn, zoom\n" +
-                          "Left stick: move the area · Menu: close";
+        vrHelpText.text = "Trigger: tap to add a waypoint, hold and drag to turn / tilt\n" +
+                          "A: remove the pin you point at (laser red) · Menu: close\n" +
+                          "Right stick: turn, zoom · Left stick: move the area";
 
         RectTransform info = UIRect("Info", vrPanelRect);
         Stretch(info, new Vector2(PanelPad, buttonsTop + 16f + helpHeight), new Vector2(-PanelPad, -PanelPad));
@@ -543,32 +655,57 @@ public partial class MapView
         UpdateVRRouteLabel();
     }
 
-    // Lower right of your view while walking: the next target and the route's numbers
+    // Lower right of your view while walking, where the desktop's route panel is (hidden while
+    // the map is open: the panel beside the hologram has it all then). Kept small, a title and at
+    // most three short lines, so it stays in the corner (x 180..390, y -215..about -150 on the
+    // sheet), well clear of the middle of your view:
+    //   no route yet:  "EVA MAP", the latest news (if any), how to open the map
+    //   on a route:    "Next: waypoint 2/3 · 340 m", the route's numbers, the latest news
+    // (Once you've plotted a route you know where the map is, so the hint goes.)
     void UpdateVRRouteLabel()
     {
-        if (vrRouteLabel == null) vrRouteLabel = VRHud.CreateLabel("EVA route (VR)", new Vector2(0.42f, -0.5f), 0.5f);
+        if (vrRouteLabel == null)
+            vrRouteLabel = VRHud.CreateLabel("EVA route (VR)", new Vector2(1f, 0f), new Vector2(-10f, 10f), RouteLabelWidth);
         vrRouteLabel.SetVisible(!open);
         if (open) return;
+        string news = string.IsNullOrEmpty(status) ? "" : Clip(status, 64); // two lines at most
         string title, detail;
         if (waypoints.Count == 0)
         {
-            title = "EVA map";
-            detail = (string.IsNullOrEmpty(status) ? "" : status + "\n") +
-                     "Menu button (left controller): open the map and plot a route";
+            title = "<color=#F0915A>EVA MAP</color>";
+            detail = (news.Length > 0 ? news + "\n" : "") +
+                     "<color=#C9A68A>Menu (left controller): plan a route</color>";
         }
         else
         {
-            title = nextWaypoint >= TargetCount || player == null ? "Route complete"
-                  : (nextWaypoint < waypoints.Count ? $"Next: waypoint {nextWaypoint + 1} of {waypoints.Count}"
-                                                    : "Next: back to Home Base") +
-                    $"  {FormatDistance(FlatDistance(player, Target(nextWaypoint)))}";
-            detail = "";
-            if (route != null && route.distance_m > 0f)
-                detail = $"Route {route.distance_m / 1000f:F2} km · {FormatMinutes(route.minutes)} · {DifficultyTag(route.difficulty)}\n";
-            if (!string.IsNullOrEmpty(status)) detail += status + "\n";
-            detail += "Menu: map";
+            if (nextWaypoint >= TargetCount || player == null) title = "Route complete";
+            else
+            {
+                string next = nextWaypoint < waypoints.Count ? $"waypoint {nextWaypoint + 1}/{waypoints.Count}" : "Home Base";
+                title = $"Next: {next} · {FormatDistance(FlatDistance(player, Target(nextWaypoint)))}";
+            }
+            detail = route != null && route.distance_m > 0f
+                ? $"Route {route.distance_m / 1000f:F2} km · {ShortMinutes(route.minutes)} · {DifficultyTag(route.difficulty)}"
+                : "";
+            if (news.Length > 0) detail += (detail.Length > 0 ? "\n" : "") + news;
         }
         vrRouteLabel.Set(title, detail);
+    }
+
+    // "45 min", "1 h 20": short enough that the route's numbers fit on one line of the label
+    static string ShortMinutes(float minutes)
+    {
+        int m = Mathf.RoundToInt(minutes);
+        return m >= 60 ? $"{m / 60} h {m % 60:00}" : $"{m} min";
+    }
+
+    // Long news cut (at a space) to about `max` characters, so the label stays small
+    static string Clip(string s, int max)
+    {
+        if (s.Length <= max) return s;
+        int cut = s.LastIndexOf(' ', max - 1);
+        if (cut < max / 2) cut = max - 1;
+        return s.Substring(0, cut).TrimEnd(' ', ',', ':', ';', '.') + "...";
     }
 
     static Vector3 PinTop(GameObject pin) =>

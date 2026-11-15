@@ -11,9 +11,24 @@ When a headset is running, the scripts switch to VR on their own; there's nothin
   - left stick walks where you're looking, at 1.5 m/s (left grip to sprint, 2×);
   - right stick snap-turns 30°;
   - jumping is off by default, for comfort. (`CharacterMover.cs`, `VRRig.cs`)
-- **HUD:**
-  - the compass, arrows and nav readout (Screen Space canvases) become a panel floating 1.3 m in front of you, and follow your head instead of your body;
-  - the map-layer label and the dust tint have VR versions. (`VRRig.cs`, `VRHud.cs`, `TerrainOverlay.cs`, `DustStormEffect.cs`)
+- **HUD:** one head-locked "HUD sheet" 1.5 m in front of you (±25° wide, 16:9), laid out like the desktop screen:
+
+  ```text
+   compass              alert cards              navigation
+   (top-left)           (top centre)             environment panel
+                                                 (top-right)
+
+                   (centre kept clear for walking)
+
+   layer label
+   minimap + upcoming hills                      EVA route
+   (bottom-left)                                 (bottom-right)
+  ```
+
+  - the compass, arrows and nav readout follow your head instead of your body;
+  - the **environment alerts** (dust, radiation, UV) show as cards top-centre, as on desktop, with the same beeps; at most 3 alerts and 2 banners at once, each at least as its title line, the one that just beeped opened up first, and "+N more" if any don't fit;
+  - the environment panel (radiation, UV, dust, pressure, temperature) sits under the navigation panel;
+  - everything on the sheet draws on top of the world, so nearby ground never cuts through it; the dust tint has a VR version. (`VRRig.cs`, `VRHud.cs`, `VR/EnvironmentHUDVR.cs`, `VR/MinimapVR.cs`, `TerrainOverlay.cs`, `DustStormEffect.cs`)
 - **Offline mode:** the terrain, map images and EVA replay are packed into the app, so the headset needs no laptop or Wi-Fi. (`OfflineReplay.cs`)
 - **Performance:** terrain detail is a bit lower, the view distance is capped at 4 km, and there are fewer dust particles.
 
@@ -34,18 +49,19 @@ When a headset is running, the scripts switch to VR on their own; there's nothin
 
 ### EVA map (route planning) in the headset
 
-Press the **Menu** button on the left controller. The terrain hologram appears about 1.3 m in front of you at table height. A panel to its left shows the route numbers, help and buttons. The right controller casts a laser; a dot shows where it lands.
+Press the **Menu** button on the left controller. The terrain hologram appears about 1.3 m in front of you at table height. A panel to its left shows the route numbers, help and buttons. The right controller casts a laser; a dot shows where it lands. The trigger works like the mouse on desktop: **tap** to add a waypoint, **hold and drag** to turn and tilt the hologram.
 
 | Action | Quest controller | Desktop |
 |---|---|---|
-| Add a waypoint | Point at the hologram, pull the right trigger | Click |
+| Add a waypoint | Point at the hologram, tap the right trigger (pull and let go) | Click |
 | Remove a waypoint | Point at its pin (the laser turns red), press A | Shift + click |
-| Turn / tilt the hologram | Hold the right grip and move your hand sideways / up and down | Drag |
+| Turn / tilt the hologram | Point at it, **hold the right trigger and drag**: sweep sideways to turn (the part you grabbed follows the laser), up / down to tilt. A 30° flick of the wrist turns it about 90° | Drag |
 | Turn / zoom | Right stick left-right / up-down | Q E / scroll |
 | Move the area shown | Left stick | W A S D / right-drag |
 | Top-down view, Centre on me, Undo last, Clear all, Return home on/off, Close map | Point at the panel button, pull the trigger | T, F, Backspace, C, R, M |
 
-- While the map is open you can't walk, and snap turn is paused, because the sticks drive the map.
+- A trigger pull counts as a drag once the laser turns more than 2.5° or where it lands slides 3 cm sideways; let go before that and it's a tap, which adds the waypoint where you first pointed (a wobble as you let go doesn't move it).
+- While the map is open you can't walk, and snap turn is paused, because the sticks drive the map. The compass, nav panel, minimap and route label hide so the hologram has room; alert cards stay up.
 - Pin numbers, the next waypoint's tag and the Home Base tag float in the world, and the minimap and route summary sit in the lower right of your view. IMGUI isn't drawn in a headset, so these are VR versions of the desktop labels. (`VR/MapViewVR.cs`, `VR/MinimapVR.cs`)
 - Route planning (A* around steep ground) runs in `Python/server.py`. In **server mode** the headset gets planned routes. In **offline mode** there is no server, so the map draws straight lines between waypoints, in magenta.
 

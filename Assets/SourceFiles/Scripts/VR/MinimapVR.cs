@@ -2,32 +2,51 @@ using UnityEngine;
 using UnityEngine.UI;
 
 /// <summary>
-/// The minimap in a headset: the same round, heading-up map and "upcoming hills" profile as on
-/// desktop (Minimap.cs builds both images), on a small panel in the lower right of your view.
-/// Right stick up / down zooms it (snap turn keeps left / right). Hidden while the EVA map is open.
+/// The minimap in a headset, laid out like the desktop one (Minimap.cs builds the images) in the
+/// bottom-left corner of the head-locked HUD sheet (VRHud.cs):
+///
+///    [legend: hazard colours]
+///    ( round map )  [upcoming hills]
+///
+/// The map is round and heading-up (the way you look is up), with north on its rim and the scale
+/// in its bottom-left corner; the "upcoming hills" box sits to its right along the bottom edge.
+/// Right stick up / down zooms (snap turn keeps left / right). Only shown in a headset, and
+/// hidden while the EVA map is open. TerrainOverlay's layer label sits above it (VRStackHeight).
 /// </summary>
 public partial class Minimap
 {
-    [Header("VR (headset only)")]
-    [Tooltip("Where the minimap floats: metres right / up of the view centre, and ahead")]
-    public Vector3 vrOffset = new Vector3(0.4f, -0.27f, 1.3f);
-    [Tooltip("Width of the minimap in a headset (m)")]
-    public float vrSize = 0.26f;
+    // Layout in HUD sheet units (800 x 450, 1 unit ≈ 1.75 mm at 1.5 m), from the bottom-left corner
+    const float VRMargin = 10f;          // from the left and bottom edges, like the desktop margin
+    const float VRMapSize = 120f;        // the round map, across
+    const float VRLegendGap = 2f;        // between the map and the legend above it
+    const float VRLegendHeight = 16f;
+    const float VRProfileGap = 8f;       // between the map and the hill profile box
+    const float VRProfileWidth = 160f, VRProfileHeight = 74f;
+    const float VRCaptionHeight = 27f;   // the profile's caption: two lines of small text
 
-    const float VRPixels = 260f; // canvas units across the map (font sizes below are in these)
+    /// <summary>Sheet units from the bottom edge of the VR HUD to the top of the minimap's legend,
+    /// so the layer label can sit just above it (like BottomLeftHeight on desktop); 0 while the
+    /// VR minimap isn't shown.</summary>
+    public static float VRStackHeight { get; private set; }
 
     GameObject vrRoot;
     RectTransform vrTurn, vrMapRect, vrNorth, vrProfileBox;
     RawImage vrMap, vrProfile;
-    Text vrScale, vrProfileText, vrLegend;
-    Camera vrAttached;
+    Text vrScale, vrProfileText, vrTerrainLegend;
+    GameObject vrHazardLegend;
     Texture2D vrDisc;
+    float vrScaleRadius = -1f;   // builtRadius the scale text was made for
+    string vrCaptionFrom;        // profileText the caption was made from
     bool vrZoomArmed = true;
-    bool vrLegendHazards;
+
+    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+    static void ResetVRStatics() => VRStackHeight = 0f; // fresh on every Play, even without a domain reload
 
     void LateUpdate()
     {
-        bool show = MarsmapInput.XRActive && mapTex != null && player != null && !(mapView != null && mapView.IsOpen);
+        bool mapOpen = MapView.AnyOpen || mapView != null && mapView.IsOpen;
+        bool show = MarsmapInput.XRActive && mapTex != null && player != null && !mapOpen;
+        VRStackHeight = show ? VRMargin + VRMapSize + VRLegendGap + VRLegendHeight : 0f;
         if (!show)
         {
             if (vrRoot != null && vrRoot.activeSelf) vrRoot.SetActive(false);
@@ -35,34 +54,41 @@ public partial class Minimap
         }
         if (vrRoot == null) BuildVR();
         if (!vrRoot.activeSelf) vrRoot.SetActive(true);
-        if (!VRHud.Follow(vrRoot.transform, vrOffset, ref vrAttached)) return;
 
         // Same as the desktop drawing: shift by how far you've walked since the image was made,
         // then turn it so the way you face is up (UI turns counter-clockwise: north goes left when you face east)
         float heading = Heading();
         vrTurn.localEulerAngles = new Vector3(0f, 0f, heading);
-        float pxPerMetre = VRPixels / (2f * builtRadius);
-        vrMapRect.anchoredPosition = new Vector2(builtCentre.x - player.position.x, builtCentre.y - player.position.z) * pxPerMetre;
+        float unitsPerMetre = VRMapSize / (2f * builtRadius);
+        vrMapRect.anchoredPosition = new Vector2(builtCentre.x - player.position.x, builtCentre.y - player.position.z) * unitsPerMetre;
         if (vrMap.texture != mapTex) vrMap.texture = mapTex;
-        float a = heading * Mathf.Deg2Rad, nr = VRPixels * 0.44f;
+        float a = heading * Mathf.Deg2Rad, nr = VRMapSize * 0.44f;
         vrNorth.anchoredPosition = new Vector2(-nr * Mathf.Sin(a), nr * Mathf.Cos(a));
 
-        string scale = FormatDistance(builtRadius);
-        if (vrScale.text != scale) vrScale.text = scale;
-        if (vrLegendHazards != showHazards || string.IsNullOrEmpty(vrLegend.text))
+        // Scale: metres from you to the edge of the map (only changes when you zoom)
+        if (vrScaleRadius != builtRadius)
         {
-            vrLegendHazards = showHazards;
-            vrLegend.text = showHazards
-                ? "<color=#2ecc71>■</color> 0-10°  <color=#f1c40f>■</color> 10-20°  <color=#e67e22>■</color> 20-30°  <color=#e74c3c>■</color> >30°"
-                : "Terrain: dark low, pale high";
+            vrScaleRadius = builtRadius;
+            vrScale.text = FormatDistance(builtRadius);
+        }
+
+        // Legend: hazard zones, or the plain terrain colours (H on a keyboard switches)
+        if (vrHazardLegend.activeSelf != showHazards)
+        {
+            vrHazardLegend.SetActive(showHazards);
+            vrTerrainLegend.gameObject.SetActive(!showHazards);
         }
 
         bool profile = profileTex != null && !string.IsNullOrEmpty(profileText);
-        vrProfileBox.gameObject.SetActive(profile);
+        if (vrProfileBox.gameObject.activeSelf != profile) vrProfileBox.gameObject.SetActive(profile);
         if (profile)
         {
             if (vrProfile.texture != profileTex) vrProfile.texture = profileTex;
-            if (vrProfileText.text != profileText) vrProfileText.text = profileText;
+            if (!ReferenceEquals(vrCaptionFrom, profileText))
+            {
+                vrCaptionFrom = profileText;
+                vrProfileText.text = TwoLines(profileText);
+            }
         }
     }
 
@@ -80,81 +106,148 @@ public partial class Minimap
 
     void BuildVR()
     {
-        vrRoot = new GameObject("Minimap (VR)", typeof(RectTransform));
-        var canvas = vrRoot.AddComponent<Canvas>();
-        canvas.renderMode = RenderMode.WorldSpace;
-        canvas.sortingOrder = 80;
-        var root = (RectTransform)vrRoot.transform;
-        root.sizeDelta = new Vector2(VRPixels, VRPixels);
-        root.localScale = Vector3.one * (vrSize / VRPixels);
+        // The map's square, anchored bottom-left on the sheet; everything else is placed from it
+        RectTransform block = VRHud.AddPanel("Minimap (VR)", Vector2.zero, new Vector2(VRMargin, VRMargin),
+                                             new Vector2(VRMapSize, VRMapSize));
+        vrRoot = block.gameObject;
+        Vector2 centre = new Vector2(0.5f, 0.5f);
 
         // Dark disc behind the map, so it reads against bright ground
-        RawImage disc = NewUI<RawImage>("Backdrop", root, Vector2.zero, new Vector2(VRPixels + 12f, VRPixels + 12f));
+        RawImage disc = AddRawImage(block, "Backdrop");
+        Place(disc.rectTransform, centre, Vector2.zero, Vector2.one * (VRMapSize + 6f));
+        if (vrDisc != null) Destroy(vrDisc); // from an earlier build whose sheet went away
         disc.texture = vrDisc = Disc(64);
         disc.color = new Color(0f, 0f, 0f, 0.55f);
 
-        vrTurn = NewUI<RectTransform>("Turn", root, Vector2.zero, new Vector2(VRPixels, VRPixels));
-        vrMap = NewUI<RawImage>("Map", vrTurn, Vector2.zero, new Vector2(VRPixels, VRPixels));
-        vrMapRect = vrMap.rectTransform;
+        // Turned to your heading every frame; the map image inside it is shifted by how far you've walked
+        vrTurn = Place(VRHud.NewRect("Turn", block), centre, Vector2.zero, Vector2.one * VRMapSize);
+        vrMap = AddRawImage(vrTurn, "Map");
+        vrMapRect = Place(vrMap.rectTransform, centre, Vector2.zero, Vector2.one * VRMapSize);
 
-        Text you = NewText("You", root, Vector2.zero, new Vector2(30f, 30f), 24, TextAnchor.MiddleCenter);
+        // You, in the middle, pointing up
+        Text you = VRHud.AddText(block, "You", 14, FontStyle.Bold, TextAnchor.MiddleCenter);
+        Place(you.rectTransform, centre, Vector2.zero, new Vector2(20f, 20f));
         you.text = "▲";
         you.color = NextColor;
-        you.fontStyle = FontStyle.Bold;
 
-        Image northBg = NewUI<Image>("North", root, Vector2.zero, new Vector2(26f, 26f));
-        northBg.color = new Color(0f, 0f, 0f, 0.7f);
-        vrNorth = northBg.rectTransform;
-        Text n = NewText("N", vrNorth, Vector2.zero, new Vector2(26f, 26f), 18, TextAnchor.MiddleCenter);
+        // North, on the rim (moved every frame)
+        Image northBg = VRHud.AddImage(block, "North", new Color(0f, 0f, 0f, 0.7f));
+        vrNorth = Place(northBg.rectTransform, centre, Vector2.zero, new Vector2(14f, 14f));
+        Text n = VRHud.AddText(vrNorth, "N", VRHud.SmallFont, FontStyle.Bold, TextAnchor.MiddleCenter);
+        VRHud.Stretch(n.rectTransform, Vector2.zero, Vector2.zero);
+        n.horizontalOverflow = HorizontalWrapMode.Overflow;
         n.text = "N";
-        n.fontStyle = FontStyle.Bold;
 
-        vrScale = NewText("Scale", root, new Vector2(-VRPixels * 0.36f, -VRPixels * 0.47f), new Vector2(110f, 22f), 15, TextAnchor.MiddleLeft);
-        vrLegend = NewText("Legend", root, new Vector2(0f, -VRPixels * 0.5f - 18f), new Vector2(VRPixels * 1.3f, 22f), 14, TextAnchor.MiddleCenter);
+        // Scale in the map's bottom-left corner, on a dark box as wide as the text
+        Image scaleBg = VRHud.AddImage(block, "Scale", new Color(0f, 0f, 0f, 0.6f));
+        FitRow(Place(scaleBg.rectTransform, Vector2.zero, new Vector2(2f, 2f), new Vector2(40f, 14f)), 4, 0f);
+        vrScale = RowText(scaleBg.transform, "Text", "");
+        vrScaleRadius = -1f;
 
-        // Upcoming hills, above the map
-        float pw = VRPixels * 1.35f, ph = VRPixels * 0.42f;
-        Image box = NewUI<Image>("Upcoming hills", root, new Vector2(0f, VRPixels * 0.5f + 14f + (ph + 22f) * 0.5f), new Vector2(pw, ph + 22f));
-        box.color = new Color(0.06f, 0.035f, 0.025f, 0.8f);
-        vrProfileBox = box.rectTransform;
-        vrProfileText = NewText("Text", vrProfileBox, new Vector2(0f, (ph + 22f) * 0.5f - 11f), new Vector2(pw - 12f, 20f), 13, TextAnchor.MiddleLeft);
-        vrProfileText.horizontalOverflow = HorizontalWrapMode.Overflow;
-        vrProfile = NewUI<RawImage>("Profile", vrProfileBox, new Vector2(0f, -10f), new Vector2(pw - 8f, ph - 2f));
+        // Legend just above the map: a swatch and name per hazard zone, or the terrain colours
+        Image legendBg = VRHud.AddImage(block, "Legend", new Color(0f, 0f, 0f, 0.6f));
+        RectTransform legend = Place(legendBg.rectTransform, Vector2.zero, new Vector2(0f, VRMapSize + VRLegendGap),
+                                     new Vector2(VRMapSize, VRLegendHeight));
+        FitRow(legend, 5, 0f);
+        RectTransform zones = VRHud.NewRect("Hazard zones", legend);
+        Row(zones, 0, 7f);
+        string[] names = { "0-10°", "10-20°", "20-30°", ">30°" };
+        for (int t = 0; t < names.Length; t++)
+        {
+            RectTransform zone = VRHud.NewRect(names[t], zones);
+            Row(zone, 0, 3f);
+            Image swatch = VRHud.AddImage(zone, "Colour", TierColors[t]);
+            var swatchSize = swatch.gameObject.AddComponent<LayoutElement>();
+            swatchSize.minWidth = swatchSize.preferredWidth = 8f;
+            swatchSize.minHeight = swatchSize.preferredHeight = 8f;
+            RowText(zone, "Name", names[t]);
+        }
+        vrHazardLegend = zones.gameObject;
+        vrTerrainLegend = RowText(legend, "Terrain colours", "Terrain: dark low, pale high");
+        vrHazardLegend.SetActive(showHazards);
+        vrTerrainLegend.gameObject.SetActive(!showHazards);
+
+        // Upcoming hills, to the right of the map along the bottom edge (as on desktop):
+        // the caption on top, the profile image under it
+        Image box = VRHud.AddImage(block, "Upcoming hills", VRHud.PanelColor);
+        vrProfileBox = Place(box.rectTransform, Vector2.zero, new Vector2(VRMapSize + VRProfileGap, 0f),
+                             new Vector2(VRProfileWidth, VRProfileHeight));
+        vrProfileText = VRHud.AddText(vrProfileBox, "Caption", VRHud.SmallFont);
+        vrProfileText.horizontalOverflow = HorizontalWrapMode.Overflow; // two set lines, never wrapped
+        RectTransform caption = vrProfileText.rectTransform;
+        caption.anchorMin = new Vector2(0f, 1f);
+        caption.anchorMax = Vector2.one;
+        caption.pivot = new Vector2(0.5f, 1f);
+        caption.offsetMin = new Vector2(5f, -2f - VRCaptionHeight);
+        caption.offsetMax = new Vector2(-5f, -2f);
+        vrProfile = AddRawImage(vrProfileBox, "Profile");
+        VRHud.Stretch(vrProfile.rectTransform, new Vector2(4f, 4f), new Vector2(-4f, -3f - VRCaptionHeight));
+        vrCaptionFrom = null;
+        box.gameObject.SetActive(false); // shown once there's a profile
+
         vrRoot.SetActive(false);
     }
 
     void DestroyVR()
     {
+        VRStackHeight = 0f;
         if (vrRoot != null) Destroy(vrRoot);
         if (vrDisc != null) Destroy(vrDisc);
         vrRoot = null;
         vrDisc = null;
     }
 
-    static T NewUI<T>(string name, Transform parent, Vector2 pos, Vector2 size) where T : Component
+    // The desktop caption is one long line ("ROUTE AHEAD 2 km   +40 m / -12 m   steepest 9°");
+    // the box here is narrower, so the climb / descent / steepest numbers go on a second line
+    static string TwoLines(string s)
     {
-        var go = new GameObject(name, typeof(RectTransform));
-        var rt = (RectTransform)go.transform;
-        rt.SetParent(parent, false);
-        rt.anchorMin = rt.anchorMax = rt.pivot = new Vector2(0.5f, 0.5f);
-        rt.anchoredPosition = pos;
-        rt.sizeDelta = size;
-        if (typeof(T) == typeof(RectTransform)) return rt as T;
-        T c = go.AddComponent<T>();
-        if (c is Graphic g) g.raycastTarget = false;
-        return c;
+        int i = s.IndexOf("   ", System.StringComparison.Ordinal);
+        return i < 0 ? s : s.Substring(0, i) + "\n" + s.Substring(i + 3).Replace("   ", "  ");
     }
 
-    static Text NewText(string name, Transform parent, Vector2 pos, Vector2 size, int fontSize, TextAnchor anchor)
+    // Anchor, pivot, position and size of a piece on the sheet, all from the same corner / centre
+    static RectTransform Place(RectTransform rt, Vector2 anchor, Vector2 pos, Vector2 size)
     {
-        Text t = NewUI<Text>(name, parent, pos, size);
-        t.font = VRHud.BuiltinFont();
-        t.fontSize = fontSize;
-        t.color = Color.white;
-        t.alignment = anchor;
-        t.supportRichText = true;
+        rt.anchorMin = rt.anchorMax = rt.pivot = anchor;
+        rt.anchoredPosition = pos;
+        rt.sizeDelta = size;
+        return rt;
+    }
+
+    // A RawImage (for the map and profile textures), drawn on top like the rest of the sheet
+    static RawImage AddRawImage(Transform parent, string name)
+    {
+        RawImage img = VRHud.NewRect(name, parent).gameObject.AddComponent<RawImage>();
+        img.raycastTarget = false;
+        VRHud.OnTop(img);
+        return img;
+    }
+
+    // Lays its children out left to right, vertically centred, each as wide as it needs
+    static void Row(RectTransform row, int padX, float spacing)
+    {
+        var layout = row.gameObject.AddComponent<HorizontalLayoutGroup>();
+        layout.padding = new RectOffset(padX, padX, 0, 0);
+        layout.spacing = spacing;
+        layout.childAlignment = TextAnchor.MiddleLeft;
+        layout.childControlWidth = layout.childControlHeight = true;
+        layout.childForceExpandWidth = layout.childForceExpandHeight = false;
+    }
+
+    // A Row that is also as wide as its children (it grows away from its pivot); its height stays as set
+    static void FitRow(RectTransform row, int padX, float spacing)
+    {
+        Row(row, padX, spacing);
+        var fit = row.gameObject.AddComponent<ContentSizeFitter>();
+        fit.horizontalFit = ContentSizeFitter.FitMode.PreferredSize;
+    }
+
+    // One line of small text in a Row (never wrapped)
+    static Text RowText(Transform row, string name, string text)
+    {
+        Text t = VRHud.AddText(row, name, VRHud.SmallFont, FontStyle.Normal, TextAnchor.MiddleLeft);
         t.horizontalOverflow = HorizontalWrapMode.Overflow;
-        t.verticalOverflow = VerticalWrapMode.Overflow;
+        t.text = text;
         return t;
     }
 

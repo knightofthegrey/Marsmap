@@ -12,9 +12,9 @@ using UnityEngine.InputSystem;
 ///   Sprint           L Shift  left grip
 ///   Snap turn        -        right stick left/right
 ///   EVA map          M        Menu (left), or click the left stick
-/// While the map is open (MapView): right-hand laser, trigger adds a waypoint / presses a panel
-/// button, A removes the pin you point at, grip + move your hand turns and tilts the hologram,
-/// right stick turns / zooms it, left stick moves the area shown.
+/// While the map is open (MapView): right-hand laser. Trigger: tap to add a waypoint, hold and
+/// drag to turn / tilt the hologram (a panel button acts as soon as the trigger goes down).
+/// A removes the pin you point at, right stick turns / zooms it, left stick moves the area shown.
 /// Walking (left stick) and jumping (A) are added to CharacterMover's own actions.
 /// </summary>
 public static class MarsmapInput
@@ -28,7 +28,7 @@ public static class MarsmapInput
     public const string RightStickPath = "<XRController>{RightHand}/{Primary2DAxis}";
 
     static InputAction nextLayer, testGust, startEva, sprint, turn;
-    static InputAction mapToggle, mapOpenAlt, mapSelect, mapRemove, mapGrab, leftStick;
+    static InputAction mapToggle, mapOpenAlt, mapSelect, mapRemove, leftStick;
     static InputAction aimPos, aimRot, gripPos, gripRot;
 
     public static InputAction NextLayer => nextLayer ??= Button("Next layer", "<Keyboard>/l",
@@ -69,9 +69,6 @@ public static class MarsmapInput
     public static InputAction MapRemove => mapRemove ??= Button("Map remove",
         "<XRController>{RightHand}/{PrimaryButton}");
 
-    public static InputAction MapGrab => mapGrab ??= Button("Map grab",
-        "<XRController>{RightHand}/{GripButton}");
-
     public static InputAction LeftStick => leftStick ??= Value("Left stick", "Vector2", LeftStickPath);
 
     // Right controller pose, in tracking space (the same space as the headset's pose, so it goes
@@ -109,10 +106,10 @@ public static class MarsmapInput
     static void ResetStatics()
     {
         foreach (InputAction a in new[] { nextLayer, testGust, startEva, sprint, turn, mapToggle, mapOpenAlt, mapSelect,
-                                          mapRemove, mapGrab, leftStick, aimPos, aimRot, gripPos, gripRot })
+                                          mapRemove, leftStick, aimPos, aimRot, gripPos, gripRot })
             a?.Dispose();
         nextLayer = testGust = startEva = sprint = turn = null;
-        mapToggle = mapOpenAlt = mapSelect = mapRemove = mapGrab = leftStick = null;
+        mapToggle = mapOpenAlt = mapSelect = mapRemove = leftStick = null;
         aimPos = aimRot = gripPos = gripRot = null;
     }
 }

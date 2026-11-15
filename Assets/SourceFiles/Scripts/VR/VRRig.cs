@@ -1,8 +1,10 @@
 using System.Collections.Generic;
+using TMPro;
 using Unity.Cinemachine;
 using UnityEngine;
 using UnityEngine.InputSystem;
 using UnityEngine.InputSystem.XR;
+using UnityEngine.Rendering;
 using UnityEngine.UI;
 using UnityEngine.XR;
 
@@ -14,7 +16,8 @@ using UnityEngine.XR;
 ///  - puts Main Camera under an "XR Rig" at the player's feet and lets the headset drive it
 ///    (TrackedPoseDriver); the Cinemachine brain and mouse look are switched off;
 ///  - right stick left/right = snap turn around your head (comfort: no smooth turning);
-///  - turns Screen Space canvases (compass, nav panel) into a panel floating in front of you;
+///  - moves the Screen Space canvases (compass, nav panel) onto the head-locked HUD sheet
+///    (VRHud.Sheet), laid out as on desktop: compass top-left, navigation top-right;
 ///  - points the compass, the direction arrows and the nav readout at your head, not your body;
 ///  - hides the player's own cube so it doesn't block the view;
 ///  - lowers terrain detail and the far clip a little so a Quest keeps its frame rate.
@@ -25,9 +28,6 @@ public class VRRig : MonoBehaviour
 {
     [Tooltip("Give up after this long if no headset starts (desktop)")]
     public float waitForXrSeconds = 3f;
-    [Tooltip("Floating panel for the converted screen canvases: distance and width in metres")]
-    public float panelDistance = 1.3f;
-    public float panelWidth = 1.2f;
     [Tooltip("Eye height used only if the headset can't report floor height")]
     public float fallbackEyeHeight = 1.6f;
     [Tooltip("VR terrain detail: higher = fewer triangles (Unity default 5)")]
@@ -45,7 +45,7 @@ public class VRRig : MonoBehaviour
     bool turnArmed = true;
     float nextTune;
     readonly HashSet<Terrain> tuned = new HashSet<Terrain>();
-    readonly List<Canvas> converted = new List<Canvas>();  // the floating HUD panel's canvases
+    readonly List<CanvasGroup> converted = new List<CanvasGroup>();  // the scene canvases on the HUD sheet
     bool hudHidden;
 
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
@@ -67,11 +67,13 @@ public class VRRig : MonoBehaviour
         }
         SnapTurn();
         // While the EVA map is open the hologram stands where the HUD floats (top-down view):
-        // hide the HUD then rather than have the two cut through each other
+        // hide the compass and nav panel then rather than have the two cut through each other.
+        // (A CanvasGroup, not Canvas.enabled: a switched-off nested canvas's graphics would just
+        // draw through the sheet's canvas instead.)
         if (hudHidden != MapView.AnyOpen)
         {
             hudHidden = MapView.AnyOpen;
-            foreach (Canvas c in converted) if (c != null) c.enabled = !hudHidden;
+            foreach (CanvasGroup g in converted) if (g != null) g.alpha = hudHidden ? 0f : 1f;
         }
         if (Time.unscaledTime >= nextTune)
         {
@@ -144,7 +146,7 @@ public class VRRig : MonoBehaviour
         TuneForQuest();
 
         Debug.Log($"[VRRig] XR active: camera on the headset ({(floor ? "floor" : "device")} origin), " +
-                  $"{(brain != null ? "Cinemachine off, " : "")}{canvases} screen canvas(es) -> floating panel, " +
+                  $"{(brain != null ? "Cinemachine off, " : "")}{canvases} screen canvas(es) -> HUD sheet, " +
                   $"{retargeted} nav script(s) follow the head, snap turn {MarsmapConfig.SnapTurnDegrees:0}°, " +
                   $"walk {MarsmapConfig.VrMoveSpeed:0.#} m/s", this);
     }
@@ -177,29 +179,33 @@ public class VRRig : MonoBehaviour
         return floor;
     }
 
-    // Screen Space canvases aren't drawn in a headset: make them a world-space panel ahead.
+    // Screen Space canvases aren't drawn in a headset: put them on the HUD sheet. The sheet is
+    // laid out in the same 800-unit-wide space as the scene Canvas (reference 800x600, matched
+    // on width), so stretched over it, the compass stays top-left and the nav panel top-right.
     int ConvertCanvases()
     {
         int n = 0;
+        RectTransform sheet = VRHud.Sheet;  // world space itself, so the loop below skips it
         foreach (Canvas c in FindObjectsByType<Canvas>(FindObjectsInactive.Include))
         {
             if (!c.isRootCanvas || c.renderMode == RenderMode.WorldSpace) continue;
             var rt = (RectTransform)c.transform;
-            Vector2 size = rt.rect.size;  // the layout size the panels were anchored in
-            if (size.x < 1f || size.y < 1f)
-            {
-                var scaler = c.GetComponent<CanvasScaler>();
-                size = scaler != null ? scaler.referenceResolution : new Vector2(800f, 600f);
-            }
             c.renderMode = RenderMode.WorldSpace;
-            converted.Add(c);
-            c.worldCamera = cam;
-            rt.SetParent(cam.transform, false);
-            rt.anchorMin = rt.anchorMax = rt.pivot = new Vector2(0.5f, 0.5f);
-            rt.sizeDelta = size;
-            rt.localPosition = new Vector3(0f, 0f, panelDistance);
+            rt.SetParent(sheet, false);       // now a nested canvas: drawn with the sheet
+            VRHud.Stretch(rt, Vector2.zero, Vector2.zero);
+            rt.localPosition = Vector3.zero;
             rt.localRotation = Quaternion.identity;
-            rt.localScale = Vector3.one * (panelWidth / size.x);
+            rt.localScale = Vector3.one;
+            if (!c.TryGetComponent(out CanvasGroup group)) group = c.gameObject.AddComponent<CanvasGroup>();
+            group.interactable = group.blocksRaycasts = false;
+            converted.Add(group);
+            // Like the rest of the sheet, draw on top of the world (nearby terrain would cut
+            // through the compass and nav panel otherwise). TMP text has its own material.
+            foreach (Graphic g in c.GetComponentsInChildren<Graphic>(true))
+            {
+                if (g is TMP_Text tmp) tmp.fontMaterial.SetInt("unity_GUIZTestMode", (int)CompareFunction.Always);
+                else VRHud.OnTop(g);
+            }
             n++;
         }
         return n;

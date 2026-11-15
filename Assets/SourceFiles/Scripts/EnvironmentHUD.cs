@@ -15,9 +15,12 @@ using UnityEngine;
 ///    temperature from the telemetry, each coloured by its alert level. Hidden while the map (M)
 ///    is open.
 ///
+/// A headset doesn't draw IMGUI (OnGUI): EnvironmentHUDVR.cs puts the same alerts and panel on
+/// the head-locked HUD sheet there.
+///
 /// Created automatically (like DustStormEffect); nothing to add to the scene.
 /// </summary>
-public class EnvironmentHUD : MonoBehaviour
+public partial class EnvironmentHUD : MonoBehaviour
 {
     [Header("Layout (screen pixels)")]
     public float alertWidth = 520f;
@@ -59,10 +62,15 @@ public class EnvironmentHUD : MonoBehaviour
         new GameObject(nameof(EnvironmentHUD)).AddComponent<EnvironmentHUD>();
     }
 
-    void OnDisable() => Unsubscribe();
+    void OnDisable()
+    {
+        Unsubscribe();
+        HideVR();
+    }
 
     void OnDestroy()
     {
+        DestroyVR();
         if (white != null) Destroy(white);
         if (beepAdvisory != null) Destroy(beepAdvisory);
         if (beepWarning != null) Destroy(beepWarning);
@@ -177,6 +185,7 @@ public class EnvironmentHUD : MonoBehaviour
     // ---------------------------------------------------------------
     void OnGUI()
     {
+        if (MarsmapInput.XRActive) return; // a headset doesn't draw IMGUI: EnvironmentHUDVR.cs has world-space versions
         if (telemetry == null && active.Count == 0 && banners.Count == 0) return;
         EnsureStyles();
         GUI.depth = -10; // above the dust tint

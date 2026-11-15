@@ -43,8 +43,11 @@ public class TerrainOverlay : MonoBehaviour
     bool searchedTerraingen;
     GUIStyle titleStyle, creditStyle;
 
-    // VR only: world-space copy of the IMGUI label, made the first time it has something to show
-    static readonly Vector2 VrLabelOffset = new Vector2(-0.35f, -0.28f); // lower-left of the view
+    // VR only: a copy of the IMGUI label on the head-locked HUD sheet (VRHud.cs), made the first
+    // time it has something to show. Sizes in HUD sheet units (the sheet is 800 x 450).
+    const float VrLabelMargin = 10f;  // from the left / bottom edge, like the desktop margin
+    const float VrLabelGap = 8f;      // between the top of the minimap's legend and the label
+    const float VrLabelWidth = 250f;
     VRHudLabel vrLabel;
     string vrShownLabel, vrShownCredit; // what vrLabel was last given, so Set runs only on change
     bool vrLabelVisible;
@@ -270,10 +273,11 @@ public class TerrainOverlay : MonoBehaviour
         credit = selected == null ? ElevationCredit : info?.credit;
     }
 
-    // In VR the label is a world-space panel lower-left in view; hidden without site layers.
+    // In VR the label is a panel on the HUD sheet, bottom-left just above the minimap (as on
+    // desktop); hidden without site layers and while the EVA map is open.
     void UpdateVrLabel()
     {
-        bool show = showLabel && MarsmapInput.XRActive && HasLayers;
+        bool show = showLabel && MarsmapInput.XRActive && HasLayers && !MapView.AnyOpen;
         if (!show)
         {
             if (vrLabel != null && vrLabelVisible)
@@ -286,11 +290,15 @@ public class TerrainOverlay : MonoBehaviour
 
         if (vrLabel == null)
         {
-            vrLabel = VRHud.CreateLabel("Layer label", VrLabelOffset);
+            vrLabel = VRHud.CreateLabel("Layer label", Vector2.zero, new Vector2(VrLabelMargin, VrLabelMargin), VrLabelWidth);
             if (vrLabel == null) return;
             vrShownLabel = vrShownCredit = null;
             vrLabelVisible = false;
         }
+
+        // Grows up from its bottom-left corner: just above the minimap, or in the corner without one
+        float minimapTop = Minimap.VRStackHeight; // 0 while the VR minimap is hidden
+        vrLabel.SetPosition(new Vector2(VrLabelMargin, minimapTop > 0f ? minimapTop + VrLabelGap : VrLabelMargin));
 
         CurrentLabel(out string label, out string credit);
         credit = credit ?? "";
