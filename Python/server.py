@@ -254,7 +254,7 @@ def prepare_tiled_polygon(poly, max_tiles):
             "name": f"Polygon lon {west:.3f}..{east:.3f}, lat {south:.3f}..{north:.3f} "
                     f"({len(keys)} tiles)",
             "sol": 0, "earth_date": "",
-            "center_lat": (south + north) / 2, "center_lon": ((west + east) / 2) % 360,
+            "center_lat": t["center_lat"], "center_lon": t["center_lon"] % 360,  # = Unity origin
             "size_m": max(t["nx"] * tx, t["nz"] * tz), "vertical_exaggeration": 1.0,
             "layers": []}
     msgs = [json.dumps(site)]

@@ -979,5 +979,8 @@ def build_tiles(poly, imagery=True, fetch_themis=fetch_themis, tile_res=TILE_RES
     hi = float(max(g.max() for g in grids.values()))
     print(f"\nAll {len(tiles)} tiles done in {(time.time() - t0) / 60:.1f} min, "
           f"{lo:.0f} m to {hi:.0f} m, edges stitched")
+    # Centre of the tile grid = Unity's world origin. Usually the polygon box's centre, but
+    # the grid is shifted to stay on the map near 180 E / the poles.
     return dict(nx=nx, nz=nz, res=tile_res, tile_size=(tile_x, tile_z), lo=lo, hi=hi,
-                tiles=tiles, spacing=spacing)
+                tiles=tiles, spacing=spacing,
+                center_lon=w0 + nx * deg_x / 2, center_lat=s0 + nz * deg_z / 2)

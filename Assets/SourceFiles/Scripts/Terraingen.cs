@@ -160,6 +160,7 @@ public class Terraingen : MonoBehaviour
 
         float heightRange = Mathf.Max((maxElev - minElev) * verticalExaggeration, 1f);
         ApplyHeights(heights, res, new Vector3(sizeX, heightRange, sizeZ));
+        SetMapElevation(minElev, maxElev, terrain.transform.position.y);
 
         Debug.Log($"Heightmap applied: {res}x{res}, {minElev:F0} to {maxElev:F0} m, " +
                   $"{sizeX:F0} x {sizeZ:F0} m (vertical x{verticalExaggeration})");
@@ -185,6 +186,7 @@ public class Terraingen : MonoBehaviour
                     (float)y / res * scale + offsetY);
 
         ApplyHeights(heights, res, perlinSize);
+        realMap = false; // random hills: no real place or elevation
         Debug.Log($"Terraingen: Perlin terrain {res}x{res}, size {perlinSize}");
     }
 
@@ -457,6 +459,7 @@ public class Terraingen : MonoBehaviour
 
     void FinishTiles(float minElev, float maxElev)
     {
+        SetMapElevation(minElev, maxElev, tileOrigin.y);
         // Tell each tile who its neighbours are, so their level of detail matches at the seams
         for (int x = 0; x < tileCountX; x++)
             for (int z = 0; z < tileCountZ; z++)
@@ -577,6 +580,53 @@ public class Terraingen : MonoBehaviour
     }
 
     // Ground height under a world position (whichever tile it is on)
+    // ---------------------------------------------------------------
+    // Where on Mars: world position -> latitude / longitude / elevation (used by the HUD)
+    // ---------------------------------------------------------------
+    // Mars metres per degree of latitude (radius 3,396,190 m), the same as Python/dem_builder.py
+    const double MetresPerDegree = 3396190.0 * Math.PI / 180.0;
+
+    bool realMap;          // the terrain came from Python (not the Perlin fallback)
+    float mapMinElev;      // elevation (m) of a normalised height of 0
+    float mapExaggeration; // vertical exaggeration it was built with
+    float mapBaseY;        // world y of a normalised height of 0
+
+    void SetMapElevation(float minElev, float maxElev, float baseY)
+    {
+        realMap = true;
+        mapMinElev = minElev;
+        mapBaseY = baseY;
+        // ApplyHeights / ApplyTile used max((max-min) * exaggeration, 1) as the height range
+        float range = Mathf.Max((maxElev - minElev) * verticalExaggeration, 1f);
+        mapExaggeration = maxElev > minElev ? range / (maxElev - minElev) : 1f;
+    }
+
+    /// <summary>True when the terrain is a real Mars map from Python (not random Perlin hills).</summary>
+    public bool HasRealMap => realMap && terrainReady;
+
+    /// <summary>Real elevation (m, Mars datum) of the ground under a world position.</summary>
+    public bool TryGetElevation(Vector3 worldPos, out float metres)
+    {
+        metres = 0f;
+        if (!HasRealMap || terrain == null) return false;
+        metres = mapMinElev + (GroundHeight(worldPos) - mapBaseY) / mapExaggeration;
+        return true;
+    }
+
+    /// <summary>Latitude (north +) and longitude (degrees east, 0-360) of a world position.
+    /// The map's centre (from the server's site message) is at world x = z = 0, +Z is north.</summary>
+    public bool TryGetLatLon(Vector3 worldPos, out double latitude, out double longitudeEast)
+    {
+        latitude = longitudeEast = 0;
+        SiteMessage site = PythonConnection.Instance != null ? PythonConnection.Instance.LatestSite : null;
+        if (!HasRealMap || site == null || !recenterTerrainAtOrigin) return false;
+        latitude = site.center_lat + worldPos.z / MetresPerDegree;
+        double cosLat = Math.Cos(site.center_lat * Math.PI / 180.0);
+        longitudeEast = site.center_lon + worldPos.x / (MetresPerDegree * Math.Max(cosLat, 1e-6));
+        longitudeEast = ((longitudeEast % 360.0) + 360.0) % 360.0;
+        return true;
+    }
+
     float GroundHeight(Vector3 pos)
     {
         Terrain t = TileAt(pos);
