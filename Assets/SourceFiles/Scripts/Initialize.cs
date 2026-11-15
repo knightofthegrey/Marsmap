@@ -6,8 +6,11 @@ public class Initialize : MonoBehaviour
     // Start is called once before the first execution of Update after the MonoBehaviour is created
     void Start()
     {
+        // Terraingen places the player itself once the terrain is ready; don't fight it.
+        if (FindFirstObjectByType<Terraingen>() != null) return;
+
         Terrain terrain = Terrain.activeTerrain;
-        if (terrain == null) return;
+        if (terrain == null || terrain.terrainData == null) return; // terrain not generated yet
         float terrainY = terrain.SampleHeight(transform.position) + terrain.transform.position.y;
         float halfHeight = 1f;
         if (TryGetComponent<Collider>(out Collider col))

@@ -11,31 +11,28 @@ public class CharacterMover : MonoBehaviour
     public float jumpHeight = 1.5f;
     public float gravity = -7.42f;
 
-    [Header("Look Settings")]
-    [SerializeField] private CinemachinePanTilt panTiltCamera;
-    [SerializeField] private InputAction moveAction;
-    [SerializeField] private InputAction jumpAction;
-
+    public CinemachinePanTilt panTiltCamera;
     private CharacterController controller;
+    private InputSystem_Actions inputActions;
     private Vector3 verticalVelocity;
 
     private void Awake()
     {
         controller = GetComponent<CharacterController>();
+        inputActions = new InputSystem_Actions();
+        OnEnable();
         Cursor.lockState = CursorLockMode.Locked;
         Cursor.visible = false;
     }
 
     private void OnEnable()
     {
-        moveAction.Enable();
-        jumpAction.Enable();
+        inputActions.Enable();
     }
 
     private void OnDisable()
     {
-        moveAction.Disable();
-        jumpAction.Disable();
+        inputActions.Disable();
     }
 
     void Update()
@@ -46,7 +43,8 @@ public class CharacterMover : MonoBehaviour
 
     private void HandleMovement()
     {
-        Vector2 input = moveAction.ReadValue<Vector2>();
+        Vector2 input = inputActions.Player.Move.ReadValue<Vector2>();
+        Debug.Log($"{input}");
 
         // Align player yaw with the Cinemachine Pan angle
         float yaw = panTiltCamera.PanAxis.Value;
@@ -64,7 +62,7 @@ public class CharacterMover : MonoBehaviour
             verticalVelocity.y = -2f;
         }
 
-        if (jumpAction.WasPressedThisFrame() && controller.isGrounded)
+        if (inputActions.Player.Jump.WasPressedThisFrame() && controller.isGrounded)
         {
             verticalVelocity.y = Mathf.Sqrt(jumpHeight * -2f * gravity);
         }
