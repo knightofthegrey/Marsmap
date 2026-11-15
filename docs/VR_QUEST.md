@@ -1,17 +1,23 @@
-# Running Marsmap on a Meta Quest
+# Running Marsmap on a Meta Quest 3
 
-> **Status (branch `vr-quest`):** the VR code is written and compiles, and the offline bundle matches the live server byte for byte. **Nothing has run on a headset yet.** On desktop (no headset) everything behaves as before.
+> **Status:** done. The team recorded its demo from the `vr-quest` branch, in VR on a **Meta Quest 3**, built on a Mac. The steps below are the ones that worked, including the pitfalls we hit. On desktop (no headset) everything behaves as before; the scripts switch to VR by themselves when a headset is running.
+
+## Contents
+
+1. [What changes in a headset](#what-changes-in-a-headset)
+2. [Controls](#controls)
+3. [Setup (Quest 3 + Mac), step by step](#setup-quest-3--mac-step-by-step)
+4. [Running the demo](#running-the-demo)
+5. [Settings file](#settings-file)
+6. [Handy commands](#handy-commands)
+7. [Troubleshooting](#troubleshooting)
+8. [Quest 1 (untested)](#quest-1-untested)
 
 ## What changes in a headset
 
-When a headset is running, the scripts switch to VR on their own; there's nothing to set in the scene:
-
-- **Camera:** the headset moves it. Cinemachine and mouse look are switched off. (`VRRig.cs`)
-- **Movement:**
-  - left stick walks where you're looking, at 1.5 m/s (left grip to sprint, 2×);
-  - right stick snap-turns 30°;
-  - jumping is off by default, for comfort. (`CharacterMover.cs`, `VRRig.cs`)
-- **HUD:** one head-locked "HUD sheet" 1.5 m in front of you (±25° wide, 16:9), laid out like the desktop screen:
+- **Camera:** the headset moves it; Cinemachine and mouse look switch off. (`VR/VRRig.cs`)
+- **Movement:** the left stick walks where you're looking (left grip to sprint, 2×), and the right stick snap-turns 30°. Jumping is off by default, for comfort. (`CharacterMover.cs`, `VR/VRRig.cs`)
+- **HUD:** IMGUI and Screen Space canvases aren't drawn inside a headset, so VR has its own versions on one head-locked **HUD sheet**. It sits 1.5 m in front of you, spans ±25° (16:9), and is laid out like the desktop screen (`VR/VRHud.cs`):
 
   ```text
    compass              alert cards              navigation
@@ -25,18 +31,25 @@ When a headset is running, the scripts switch to VR on their own; there's nothin
    (bottom-left)                                 (bottom-right)
   ```
 
-  - the compass, arrows and nav readout follow your head instead of your body;
-  - the **environment alerts** (dust, radiation, UV) show as cards top-centre, as on desktop, with the same beeps; at most 3 alerts and 2 banners at once, each at least as its title line, the one that just beeped opened up first, and "+N more" if any don't fit;
-  - the environment panel (radiation, UV, dust, pressure, temperature) sits under the navigation panel;
-  - everything on the sheet draws on top of the world, so nearby ground never cuts through it; the dust tint has a VR version. (`VRRig.cs`, `VRHud.cs`, `VR/EnvironmentHUDVR.cs`, `VR/MinimapVR.cs`, `TerrainOverlay.cs`, `DustStormEffect.cs`)
-- **Offline mode:** the terrain, map images and EVA replay are packed into the app, so the headset needs no laptop or Wi-Fi. (`OfflineReplay.cs`)
+  - **Compass and nav:** the compass, its arrows and the nav readout follow your head, not your body.
+  - **Alert cards** (dust, radiation, UV) work like desktop, with the same beeps (`VR/EnvironmentHUDVR.cs`):
+    - at most 3 alerts and 2 banners at once;
+    - each gets at least its title line;
+    - the alert that just beeped opens up first;
+    - "+N more" counts any that don't fit;
+    - they clear when the EVA ends.
+  - **Environment panel:** radiation, UV, dust, pressure and temperature, under the navigation panel.
+  - **Minimap:** bottom-left with the "upcoming hills" profile to its right (`VR/MinimapVR.cs`). The layer label sits above it (`TerrainOverlay.cs`).
+  - **Drawing order:** everything on the sheet draws on top of the world, so nearby ground never cuts through it. The dust storm has a VR screen tint (`DustStormEffect.cs`).
+- **EVA map:** a laser from the right controller drives the hologram (`VR/MapViewVR.cs`); see below.
+- **Offline mode:** the terrain, map images and EVA replay can be packed into the app, so the headset needs no laptop. (`OfflineReplay.cs`, `Python/export_offline.py`)
 - **Performance:** terrain detail is a bit lower, the view distance is capped at 4 km, and there are fewer dust particles.
 
 ## Controls
 
-| Action | Quest controller | Desktop |
+| Action | Quest 3 controller | Desktop |
 |---|---|---|
-| Walk | Left stick | W A S D / arrow keys |
+| Walk | Left stick (where you look) | W A S D / arrow keys |
 | Look | Turn your head | Mouse |
 | Turn | Right stick left/right (30° snaps) | Mouse |
 | Sprint | Hold left grip | Hold Left Shift |
@@ -44,128 +57,118 @@ When a headset is running, the scripts switch to VR on their own; there's nothin
 | Test dust gust | Y | G |
 | Start EVA replay (offline mode) | X | Enter |
 | Jump | A (only if `allow_jump_in_vr` is true) | Space |
-| Open / close the EVA map | Menu button (left controller); clicking the left stick also opens it | M |
 | Minimap zoom | Right stick up / down | + / − |
+| Open / close the EVA map | Menu button (left controller); clicking the left stick also opens it | M |
 
 ### EVA map (route planning) in the headset
 
-Press the **Menu** button on the left controller. The terrain hologram appears about 1.3 m in front of you at table height. A panel to its left shows the route numbers, help and buttons. The right controller casts a laser; a dot shows where it lands. The trigger works like the mouse on desktop: **tap** to add a waypoint, **hold and drag** to turn and tilt the hologram.
+Press the **Menu** button on the left controller.
+- **The hologram:** the terrain appears about 1.3 m in front of you at table height.
+- **The panel:** to its left, it shows the route numbers, help and buttons.
+- **The laser:** the right controller casts it, and a dot shows where it lands.
 
-| Action | Quest controller | Desktop |
+The trigger works like the mouse on desktop: **tap** to add a waypoint, **hold and drag** to turn and tilt the hologram.
+
+| Action | Quest 3 controller | Desktop |
 |---|---|---|
 | Add a waypoint | Point at the hologram, tap the right trigger (pull and let go) | Click |
-| Remove a waypoint | Point at its pin (the laser turns red), press A | Shift + click |
 | Turn / tilt the hologram | Point at it, **hold the right trigger and drag**: sweep sideways to turn (the part you grabbed follows the laser), up / down to tilt. A 30° flick of the wrist turns it about 90° | Drag |
+| Remove a waypoint | Point at its pin (the laser turns red), press A | Shift + click |
 | Turn / zoom | Right stick left-right / up-down | Q E / scroll |
 | Move the area shown | Left stick | W A S D / right-drag |
 | Top-down view, Centre on me, Undo last, Clear all, Return home on/off, Close map | Point at the panel button, pull the trigger | T, F, Backspace, C, R, M |
 
-- A trigger pull counts as a drag once the laser turns more than 2.5° or where it lands slides 3 cm sideways; let go before that and it's a tap, which adds the waypoint where you first pointed (a wobble as you let go doesn't move it).
-- While the map is open you can't walk, and snap turn is paused, because the sticks drive the map. The compass, nav panel, minimap and route label hide so the hologram has room; alert cards stay up.
-- Pin numbers, the next waypoint's tag and the Home Base tag float in the world, and the minimap and route summary sit in the lower right of your view. IMGUI isn't drawn in a headset, so these are VR versions of the desktop labels. (`VR/MapViewVR.cs`, `VR/MinimapVR.cs`)
-- Route planning (A* around steep ground) runs in `Python/server.py`. In **server mode** the headset gets planned routes. In **offline mode** there is no server, so the map draws straight lines between waypoints, in magenta.
+- **Tap or drag:** a pull counts as a drag once the laser turns more than 2.5°, or where it lands slides 3 cm sideways. Let go before that and it's a tap. The waypoint goes where you first pointed, so a wobble as you let go doesn't move it.
+- **While the map is open:** you can't walk and snap turn is paused, because the sticks drive the map. The compass, nav panel, minimap and route label hide to make room for the hologram; the alert cards stay up.
+- **Route planning:** the A* planner runs in `Python/server.py`. In **server mode** the headset gets planned routes. In **offline mode** there is no server, so the map draws straight lines between waypoints, in magenta.
 
-## Quest 1 warning
+## Setup (Quest 3 + Mac), step by step
 
-Quest 1 is **officially unsupported** by Meta's current SDKs and by Unity 6. Builds can still be sideloaded (installed over USB, not through Meta's store), but:
+**One time:**
 
-- People report Unity 6 + OpenXR apps **crashing at startup**, or controllers **not being detected**, on a Quest 1.
-- One developer got Unity 6.0 working with **OpenXR 1.13.2**, the **Meta Quest Support** feature group and the **Oculus Touch** controller profile. The same developer reported that the **Universal 3D (URP) template crashed** on their Quest 1, and this project is URP.
-- A build whose supported-devices list includes Quest 3 can crash a Quest 1. You may need a separate Quest 1 build.
+1. **Android module.**
+   - In Unity Hub: Installs → 6000.6.9f1 → ⋯ → **Add modules** → **Android Build Support**, with **OpenJDK** and **Android SDK & NDK Tools** ticked.
+   - **Restart Unity** afterwards. Until then, Build Profiles shows "No Android module loaded" and the Android, Meta Quest and Android XR platforms are greyed out.
+2. **Developer mode on the headset.**
+   - In the Meta Horizon phone app: Devices → your Quest 3 → Headset settings → **Developer mode** on. This needs a free Meta developer account.
+   - Plug the headset into the Mac with USB-C, put it on, and accept **Allow USB debugging**.
 
-**Fallbacks:**
-- **Any Quest 2, 3, 3S or Pro:** same code, officially supported.
-- **PC VR over Quest Link:** needs a Windows PC.
-- **The desktop demo.**
+**In Unity:** these settings are already committed on this branch. Check them if you start from a fresh copy or a different branch.
 
-Sources:
-- [Unity and Quest 1 deprecation](https://discussions.unity.com/t/unity-and-quest-1-deprecation/932329)
-- [Can't build for Quest 1 with Unity 6](https://discussions.unity.com/t/cant-build-my-game-for-quest-1-with-unity-6/1554923)
-- [OpenXR 1.12 crash on Quest](https://discussions.unity.com/t/openxr-v-1-12-app-crash-at-start-on-meta-quest/1538670)
-- [Unity XR support packages](https://docs.unity.com/en-us/engine/6000.6/manual/xr/support/support-packages)
-- [Meta: XR Plugin Management](https://developers.meta.com/vr/documentation/unity/unity-xr-plugin/)
+3. **Packages:** **XR Plug-in Management** and **OpenXR**. They're in `Packages/manifest.json`; install them through the Package Manager if they're missing.
+4. **Turn OpenXR on for Android.** This is the step that's easy to miss.
+   - Go to **Edit → Project Settings → XR Plug-in Management** (the top-level page, not the "OpenXR" page under it).
+   - On the **Android tab** (robot icon), tick **OpenXR** under *Plug-in Providers*. Also tick **Initialize XR on Startup**.
+   - If OpenXR isn't ticked here, the app starts as a **flat 2D window**: no head tracking, the sticks and buttons do nothing, and the desktop UI shows. You can still configure the OpenXR sub-page without it being on, which is why it's easy to miss.
+5. **OpenXR settings (Android tab):**
+   - **Meta Quest Support:** tick it, then click its gear icon and make sure **Quest 3** is a target device.
+   - **Enabled Interaction Profiles:** click the **+** under the list and add **Oculus Touch Controller Profile** and **Meta Quest Touch Plus Controller Profile**.
+6. **Build Profiles** (File → Build Profiles):
+   - Select **Android** (or **Meta Quest**), then click **Switch Platform**.
+   - Set **Run Device** to your Quest 3; click Refresh if it isn't listed.
+   - Texture compression: **ASTC**.
+7. **Player Settings → Android → Other Settings:**
 
-## Quest 3 and Quest 1: same code, separate builds
+   | Section | Setting | Value |
+   |---|---|---|
+   | Configuration | Scripting Backend | **IL2CPP** |
+   | Configuration | Active Input Handling | Input System Package (New) |
+   | Identification | Package Name | `com.marsmap.eva` |
+   | Identification | Minimum API Level | Android 10 (API 29) |
+   | Identification | Target API Level | Automatic |
+   | Android Application Configuration (scroll down) | Target Architectures | **ARM64** only |
+   | Android Application Configuration | Internet Access | **Require** (needed for server mode) |
+   | Rendering | Graphics APIs and Color Space | Defaults are fine (Vulkan first, Linear) |
 
-The scripts are identical for every Quest. What differs is the build:
+8. **Project Validation** (XR Plug-in Management → Project Validation, Android tab): click **Fix All** until nothing is left.
 
-| | Quest 3 / 3S (and 2, Pro) | Quest 1 |
-|---|---|---|
-| Support | Official (Unity 6 + current OpenXR) | Unofficial: may crash or lose controllers |
-| OpenXR package | Latest is fine | May need an older version (one report: 1.13.2) |
-| Controller profile | Oculus Touch; optionally also Meta Quest Touch Plus | Oculus Touch |
-| Supported devices in the build | Quest 3 / 3S (add 2 / Pro if wanted) | **Quest 1 only.** A list that includes Quest 3 was reported to crash a Quest 1 |
-| Performance | Plenty of headroom; render scale 1.0 or higher | Needs the cuts already in the code (render scale 0.8–1.0) |
+**Every build:**
 
-- **Make one build per headset**, with its own supported-devices setting.
-- **Keep the package versions apart.** If the Quest 1 needs an older OpenXR version, keep that change local or on its own branch, not on `vr-quest`, so it doesn't break the Quest 3 build.
-- **Get the Quest 3 working first.** It proves the VR code; a Quest 1 failure after that is a Quest 1 support problem, not the project.
+9. Plug in the headset. In **File → Build Profiles**, click **Build And Run** (Cmd + B). Save the `.apk` to a folder outside `Assets`, e.g. `Builds/`.
+   - The first build takes 5–15 minutes; later builds take a few.
+   - The app launches on the headset when the build finishes. Later you'll find it under **App Library → Unknown Sources**.
 
-## Setup
+## Running the demo
 
-### Step 0: smoke test (do this first, ~30 min)
+### Offline (no laptop needed)
 
-Prove the headset can run *any* Unity 6 build before debugging this project:
+The bundle in `Assets/StreamingAssets/Marsmap/` (about 5 MB) is packed into the app. It holds the HiRISE site (terrain plus the photo, slope and thermal layers) and the 48-second EVA replay.
 
-1. **Unity Hub:** Installs → Unity 6000.6.9f1 → Add modules → **Android Build Support**, including OpenJDK, Android SDK & NDK.
-2. **Headset:** turn on **developer mode** (Meta Horizon phone app → your headset → Developer mode; needs a free Meta developer account). Connect it to the computer with USB-C and accept the "Allow USB debugging" prompt in the headset.
-3. Do the Unity steps below on an empty scene and **Build And Run**. If it crashes or the controllers don't work, try an older OpenXR package version before going further.
+1. Open the app. With `"mode": "auto"` it waits 2.5 s for the server, then uses the bundle. `"mode": "offline"` skips the wait.
+2. Press **X** to start the EVA.
 
-### Unity project settings
+> **Regenerate the bundle before you build.** The bundle committed on this branch was exported before the alert system, so its replay has no alerts and no UV readings. After any change to the site, the sol data or `events.json`, export it again, then rebuild:
+>
+> ```bash
+> python3 Python/export_offline.py              # the HiRISE site (default; right size for a Quest)
+> python3 Python/export_offline.py --demo       # or the fake demo terrain
+> ```
+>
+> The big tiled Gale map can be exported too, with `--polygon`, but it is hundreds of MB. On a tiled map, **B** switches between photo and height colours. There's no floating layer label for tiles in VR.
 
-1. **Package Manager:** install **XR Plug-in Management** and **OpenXR**. (Not added to this branch yet, so the project still opens without them.)
-2. **Project Settings → XR Plug-in Management → Android tab:**
-   - tick **OpenXR**;
-   - under OpenXR: enable the **Meta Quest Support** feature group, and if it lists target devices, include the headset you have;
-   - interaction profiles: add **Oculus Touch Controller Profile**.
-3. **File → Build Profiles:** switch to **Android**.
-4. **Player Settings → Android:**
-   - Scripting Backend **IL2CPP**, Target Architecture **ARM64**;
-   - **Internet Access: Require**, needed for server mode;
-   - texture compression **ASTC**.
-5. **URP quality for a Quest:** in the URP asset used on Android:
-   - post-processing off, HDR off;
-   - MSAA 4×;
-   - shadows off or low;
-   - render scale 0.8–1.0.
-6. Open `Assets/Scenes/GetStarted_Scene.unity` and **Build And Run** with the headset connected.
+### Live from the laptop (server mode)
 
-## Where the data comes from
+This mode gives you route planning and the latest alerts and readings.
 
-The settings file is `Assets/Resources/marsmap_config.json`.
-
-### Offline mode (recommended for a demo)
-
-The bundle in `Assets/StreamingAssets/Marsmap/` is packed into the app, about 5 MB:
-- the HiRISE site: terrain plus the photo, slope and thermal layers;
-- the 48-second EVA replay.
-
-**In the headset:**
-1. If no server answers within 2.5 s (`"mode": "auto"`), the app uses the bundle.
-2. Press **X** to start the EVA replay.
-3. The dust gust comes about 20 s in.
-
-**After changing the site, sol data or events**, regenerate the bundle, then rebuild the app:
-
-```
-python3 Python/export_offline.py              # the HiRISE site (default; right size for a Quest)
-python3 Python/export_offline.py --demo       # or the fake demo terrain
-```
-
-The big tiled Gale crater map (`server.py` with no arguments) can be exported too, with `--polygon`. It is hundreds of MB and much too heavy for a Quest 1. On a tiled map, **B** switches between photo and height colours, but there's no floating layer label for tiles in VR yet.
-
-### Server mode (live from the laptop)
-
-1. Start the server listening to the network:
-   ```
+1. **Find the laptop's address** on the network you'll use:
+   - run `ipconfig getifaddr en0`, or
+   - read the line `server.py` prints at startup (`Headset on the same Wi-Fi: set server_url … to ws://…:8765`).
+2. **Put it in `Assets/Resources/marsmap_config.json`** as `"server_url": "ws://<address>:8765"`, then **rebuild**. The config is packed into the app, so a new address needs a new build.
+3. **Same network.**
+   - Put the laptop and headset on the same Wi-Fi. A phone hotspot is safest, because venue Wi-Fi often blocks devices from reaching each other.
+   - Click **Allow** when macOS asks whether Python can accept incoming connections.
+4. **Start the server before opening the app.**
+   ```bash
    python3 Python/server.py --site --host 0.0.0.0
    ```
-   It prints the address to use, e.g. `ws://192.168.0.48:8765`.
-2. Put that address in `server_url` in `marsmap_config.json`, then rebuild.
-3. **Network:** the laptop and headset must be on the same Wi-Fi (a phone hotspot is safest; venue Wi-Fi often blocks devices from talking to each other), and macOS must allow incoming connections for Python.
-4. Start `python3 Python/feeder.py` to begin the EVA.
+   - **Why the order matters:** in auto mode the app waits 2.5 s for the server, then **stays offline for that run**. If you started the server late, quit the app and open it again (no rebuild needed).
+   - **Why `--host 0.0.0.0`:** without it the server only accepts connections from the laptop itself.
+5. **Open the app**, wait until you see Mount Sharp, then start the EVA:
+   ```bash
+   python3 Python/feeder.py
+   ```
 
-### Settings file
+**The committed config points at the event laptop.** `marsmap_config.json` on this branch has `server_url` set to `ws://10.0.200.213:8765`, the laptop used at the event. Change it for your own setup.
 
 | Key | Default | Meaning |
 |---|---|---|
@@ -244,16 +247,70 @@ Hand tracking must also be on in the headset: Settings → Movement tracking →
 **Testing in the editor:** on a Mac there's no Quest Link, so AR can only be tried in an APK. On desktop Play mode AR mode does nothing, and the game runs as before.
 
 The AR code only compiles when the Meta SDK is installed (`AR/Meta/*.asmdef`), so a checkout without it still builds and runs in VR.
+The desktop editor also reads this address. With it pointing at another machine, desktop Play only gets the real terrain if that server is running with `--host 0.0.0.0`.
+
+## Settings file
+
+`Assets/Resources/marsmap_config.json`, read at startup (in the editor and in headset builds):
+
+| Key | Default in code | Committed on this branch | Meaning |
+|---|---|---|---|
+| `server_url` | `ws://127.0.0.1:8765` | `ws://10.0.200.213:8765` | Server address; in a headset, the laptop's Wi-Fi IP |
+| `mode` | `auto` | `auto` | `auto`: the server if it answers within `offline_after_s`, else the bundle (the fallback only happens in a headset). `server`: always the server. `offline`: always the bundle, on desktop too |
+| `offline_after_s` | 2.5 | 2.5 | Auto mode: seconds to wait for the server |
+| `offline_auto_start_s` | 0 | 0 | Offline: 0 = start the EVA with X / Enter; otherwise start automatically this many seconds after the terrain loads |
+| `vr_move_speed` | 1.5 | **3** | Walking speed in VR (m/s); fast smooth movement can cause motion sickness |
+| `vr_sprint_multiplier` | 2 | 2 | Left-grip sprint multiplier |
+| `snap_turn_degrees` | 30 | 30 | Right-stick snap turn |
+| `allow_jump_in_vr` | false | false | A button jumps |
+
+## Handy commands
+
+**adb.** Unity installs its own copy of `adb` (the Android Debug Bridge), but it isn't on your PATH on a Mac. Add it once:
+
+```bash
+echo 'export PATH="$PATH:/Applications/Unity/Hub/Editor/6000.6.9f1/PlaybackEngines/AndroidPlayer/SDK/platform-tools"' >> ~/.zshrc
+source ~/.zshrc
+```
+
+Then, with the headset plugged in:
+
+```bash
+adb devices                                 # is the headset connected?
+adb shell am force-stop com.marsmap.eva     # quit the app
+adb shell monkey -p com.marsmap.eva 1       # open it again (e.g. after starting the server)
+adb logcat -s Unity                         # live Unity log; look for "[VRRig] XR active"
+adb pull /sdcard/Oculus/Screenshots ~/Desktop/quest-screenshots
+```
+
+**In the headset:**
+- **Quit:** press the **Meta button** (right controller) → **Quit**.
+- **Screenshot:** hold the **Meta button** and press a **trigger**.
+
+**Meta Quest Developer Hub** (Mac app) can also install builds, show logs, and cast the headset view to the Mac for an audience.
 
 ## Troubleshooting
 
 | Symptom | Likely cause | Try |
 |---|---|---|
-| App crashes on launch (Quest 1) | Unity 6 / OpenXR support for Quest 1 | Older OpenXR version; supported-devices list with only Quest 1; or use a newer Quest |
-| Controllers do nothing | Missing interaction profile | Add Oculus Touch Controller Profile under OpenXR |
-| View doesn't follow the head | OpenXR not running | Check that OpenXR is ticked for Android; look for `[VRRig] XR active` in the logs (`adb logcat -s Unity`) |
+| The app is a flat window in front of you; no head tracking; sticks and B do nothing; desktop labels like "L: next layer" | OpenXR isn't turned on for Android | XR Plug-in Management → **Android tab** → tick **OpenXR** (setup step 4), save, rebuild |
+| Build Profiles says "No Android module loaded" | Android module missing | Install it from Unity Hub (setup step 1), restart Unity |
+| Controllers do nothing (but the view follows your head) | No interaction profile | OpenXR (Android tab) → Enabled Interaction Profiles → **+** → Oculus Touch / Meta Quest Touch Plus |
+| `zsh: command not found: adb` | adb isn't on the PATH | Use the full path, or add it ([Handy commands](#handy-commands)) |
+| Mount Sharp loads but `feeder.py` changes nothing | The app went offline: the server started late, the IP is wrong, or the Wi-Fi blocks devices | Quit and reopen the app with the server running; check `server_url` (rebuild after changing it); use a phone hotspot. Offline, press X |
+| Worked yesterday, not today | The laptop's IP changed (new network) | Update `server_url`, rebuild |
 | Random hills instead of Mount Sharp | No server and no bundle | Run `export_offline.py` and rebuild, or check `server_url` / Wi-Fi |
-| No dust or events | EVA not started | Offline: press X. Server mode: run `feeder.py` |
+| Alerts beep but nothing shows | An old build (before the VR HUD) | Rebuild from this branch: alerts and the environment panel now show in VR |
+| No alerts at all offline | The committed bundle predates the alerts | Run `python3 Python/export_offline.py`, rebuild |
 | Stutter | Quest GPU | Lower the URP render scale; turn off shadows and post-processing |
 | AR: Mars shows instead of the room | Passthrough didn't start, so it fell back to VR | Look for `[ARView] Staying in VR:` in `adb logcat -s Unity`; run **Marsmap → AR: Set Up Quest Passthrough** and rebuild |
 | AR: black instead of the room | Something draws an opaque background | Turn post-processing off on the camera; check no other camera draws to the headset |
+
+## Quest 1 (untested)
+
+The team only used a Quest 3.
+- **Support:** Unity 6 and Meta's current SDKs officially dropped the original Quest. People report Unity 6 + OpenXR apps crashing at startup on it, or losing their controllers.
+- **What one developer did:** they got Unity 6.0 running with OpenXR 1.13.2, but their URP project crashed.
+- **If you try:** make a separate build whose target-device list is Quest 1 only (a list that includes Quest 3 was reported to crash a Quest 1). Keep any older OpenXR version off this branch.
+
+Sources: [Unity and Quest 1 deprecation](https://discussions.unity.com/t/unity-and-quest-1-deprecation/932329) · [Can't build for Quest 1 with Unity 6](https://discussions.unity.com/t/cant-build-my-game-for-quest-1-with-unity-6/1554923) · [OpenXR 1.12 crash on Quest](https://discussions.unity.com/t/openxr-v-1-12-app-crash-at-start-on-meta-quest/1538670)
