@@ -1,0 +1,24 @@
+{
+  "sol": 4560,
+  "earth_date_utc": "2025-06-03",
+  "eva_start_lmst": "9:00",
+  "eva_min": 240,
+  "source": "MSL RAD+REMS sol 4560 (2025-06-03), replayed",
+  "rad": {
+    "label": "https://pds-ppi.igpp.ucla.edu/data/MSL-M-RAD-3-RDR-V1.0/DATA/SOL_04489_04612/RAD_RDR_2025_154_22_44_4560_V00.LBL",
+    "data": "https://pds-ppi.igpp.ucla.edu/data/MSL-M-RAD-3-RDR-V1.0/DATA/SOL_04489_04612/RAD_RDR_2025_154_22_44_4560_V00.TXT",
+    "earth_date": "2025-06-03",
+    "observations": 87,
+    "detector": "E"
+  },
+  "rems": {
+    "files": [
+      "https://atmos.nmsu.edu/PDS/data/mslrem_1001/DATA/SOL_04489_04612/SOL04560/RME_802257765RMD45600000000_______P1.TAB"
+    ]
+  },
+  "not_available": {
+    "wind_ms": "REMS wind sensor returns no data for these sols"
+  },
+  "max_gap_between_readings_h": 0.5,
+  "generated_by": "fetch_sol.py"
+}
