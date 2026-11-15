@@ -7,7 +7,7 @@ The HUD warns the astronaut about three hazards: **dust storms** (early warning)
 | Scenarios | `Python/events.json` (`"type": "scenario"`) | Scripted events that change the replayed readings |
 | Detector | `Python/alerts.py` (`AlertDetector`) | Watches the telemetry only and decides the alerts |
 | Feeder | `Python/feeder.py` | Runs both and sends `telemetry` + `alert` messages |
-| HUD | `Assets/SourceFiles/Scripts/EnvironmentHUD.cs` | Alert cards, beeps, environment panel |
+| HUD | `Assets/SourceFiles/Scripts/EnvironmentHUD.cs` | Alert cards, event banners, beeps |
 
 Preview the whole demo without Unity or a server:
 
@@ -30,7 +30,7 @@ The replayed sol (Curiosity sol 4560, 09:00–13:00 Mars time) was calm. There w
 - **A local dust front.** It dims the real UV, makes the pressure dip, and cools the air.
 - **A solar particle event (SPE).** It adds to the real dose rate.
 
-Both are shaped on measured Mars events (sources below). While one of them is changing the data, the telemetry has `"scenario": "dust_front"` or `"solar_particle_event"`. The HUD then shows **SIMULATED** in the panel and on each alert card.
+Both are shaped on measured Mars events (sources below). While one of them is changing the data, the telemetry has `"scenario": "dust_front"` or `"solar_particle_event"`. Each alert card then carries a **SIMULATED** tag.
 
 **The detector never sees the script.** It compares each reading with what the real sol measured at the same local time, the way a suit computer would compare against a forecast. Run on the real data alone, it raises only the UV alerts. It raises no dust or radiation alerts, so there are no false alarms.
 

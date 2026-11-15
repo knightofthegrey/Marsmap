@@ -11,9 +11,6 @@ using UnityEngine;
 ///    gets worse.
 ///  - Banners under them for a few seconds: EVA events (dust gust, navigation degraded), notes
 ///    from Earth, alerts that cleared.
-///  - Environment panel (right, under the navigation panel): radiation, UV, dust, pressure and
-///    temperature from the telemetry, each coloured by its alert level. Hidden while the map (M)
-///    is open.
 ///
 /// Created automatically (like DustStormEffect); nothing to add to the scene.
 /// </summary>
@@ -21,7 +18,6 @@ public class EnvironmentHUD : MonoBehaviour
 {
     [Header("Layout (screen pixels)")]
     public float alertWidth = 520f;
-    public float panelWidth = 240f;
     public int fontSize = 13;
     [Tooltip("Seconds that event, Earth-note and 'cleared' banners stay up")]
     public float bannerSeconds = 6f;
@@ -43,14 +39,13 @@ public class EnvironmentHUD : MonoBehaviour
     readonly Dictionary<string, ActiveAlert> active = new Dictionary<string, ActiveAlert>();
     readonly List<Banner> banners = new List<Banner>();
     readonly List<ActiveAlert> sorted = new List<ActiveAlert>();
-    readonly Vector3[] corners = new Vector3[4];
     TelemetryMessage telemetry;
     bool subscribed;
 
-    MapView mapView; GetState navPanel; float nextSearch;
+    MapView mapView; float nextSearch;
     AudioSource audioSource; AudioClip beepAdvisory, beepWarning, beepDanger;
     Texture2D white;
-    GUIStyle titleStyle, textStyle, tagStyle, panelStyle;
+    GUIStyle titleStyle, textStyle, tagStyle;
 
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
     static void EnsureExists()
@@ -72,11 +67,10 @@ public class EnvironmentHUD : MonoBehaviour
     void Update()
     {
         if (!subscribed) TrySubscribe();
-        if (Time.unscaledTime >= nextSearch && (mapView == null || navPanel == null))
+        if (Time.unscaledTime >= nextSearch && mapView == null)
         {
-            nextSearch = Time.unscaledTime + 1f; // these appear once the terrain has loaded
-            if (mapView == null) mapView = FindAnyObjectByType<MapView>();
-            if (navPanel == null) navPanel = FindAnyObjectByType<GetState>();
+            nextSearch = Time.unscaledTime + 1f; // it appears once the terrain has loaded
+            mapView = FindAnyObjectByType<MapView>();
         }
     }
 
@@ -177,7 +171,7 @@ public class EnvironmentHUD : MonoBehaviour
     // ---------------------------------------------------------------
     void OnGUI()
     {
-        if (telemetry == null && active.Count == 0 && banners.Count == 0) return;
+        if (active.Count == 0 && banners.Count == 0) return;
         EnsureStyles();
         GUI.depth = -10; // above the dust tint
         banners.RemoveAll(b => Time.unscaledTime > b.until);
@@ -192,8 +186,6 @@ public class EnvironmentHUD : MonoBehaviour
         sorted.Sort((a, b) => Rank(b.msg.level).CompareTo(Rank(a.msg.level)));
         foreach (ActiveAlert a in sorted) y = DrawAlert(a, x, y, w) + 6f;
         foreach (Banner b in banners) y = DrawCard(x, y, w, b.color, b.title, b.text, null, 1f, 0f) + 6f;
-
-        if (!mapOpen && telemetry != null) DrawPanel();
     }
 
     float DrawAlert(ActiveAlert a, float x, float y, float w)
@@ -247,59 +239,6 @@ public class EnvironmentHUD : MonoBehaviour
         }
     }
 
-    void DrawPanel()
-    {
-        TelemetryMessage t = telemetry;
-        string Row(string label, string value, string category = null)
-        {
-            Color c = category != null && active.TryGetValue(category, out ActiveAlert a) ? LevelColor(a.msg.level) : Color.white;
-            return $"<color=#C9A68A>{label}</color>  <color=#{ColorUtility.ToHtmlStringRGB(c)}>{value}</color>\n";
-        }
-
-        int evaS = Mathf.Max(0, Mathf.RoundToInt(t.t_eva_s));
-        int lmstMin = Mathf.RoundToInt(t.lmst_h * 60f);
-        string text = "<color=#F0915A><b>ENVIRONMENT</b></color>\n" +
-                      Row("EVA clock", $"{evaS / 3600}:{evaS / 60 % 60:00}   Mars time {lmstMin / 60 % 24:00}:{lmstMin % 60:00}") +
-                      Row("Radiation", $"{t.dose_rate_uGy_h:0.0} µGy/h" +
-                                       (t.dose_expected_uGy_h > 0f ? $"  (normal {t.dose_expected_uGy_h:0.0})" : ""), "radiation") +
-                      Row("EVA dose", $"{t.dose_total_mGy:0.000} mGy", "radiation");
-        if (t.uv_index > 0f || t.uv_abc_wm2 > 0f)
-            text += Row("UV index", $"~{t.uv_index:0}   UV-C {t.uv_c_wm2:0.00} W/m²", "uv");
-        if (t.uv_abc_wm2 > 0f)
-            text += Row("Dust", t.dust_tau >= 0.05f ? $"+{t.dust_tau:0.00} opacity (from UV)" : "clear (UV normal)", "dust");
-        text += Row("Pressure", $"{t.pressure_pa:0} Pa" +
-                                (Mathf.Abs(t.pressure_anomaly_pa) >= 0.3f ? $"  ({t.pressure_anomaly_pa:+0.0;-0.0} vs normal)" : ""), "dust") +
-                Row("Air temp", $"{t.temp_c:0} °C");
-        if (!string.IsNullOrEmpty(t.scenario))
-            text += $"<color=#7FB2FF><b>SIMULATED:</b> {t.scenario.Replace("solar_particle_event", "solar particle event").Replace("dust_front", "dust front").Replace(",", ", ")}</color>\n";
-        if (!string.IsNullOrEmpty(t.source))
-            text += $"<size={fontSize - 3}><color=#9A8A7A>{t.source}</color></size>";
-        text = text.TrimEnd('\n');
-
-        Rect nav = NavPanelRect();
-        float w = Mathf.Max(panelWidth, nav.width);
-        float x = nav.width > 0f ? nav.xMax - w : Screen.width - w - 10f;
-        float y = nav.height > 0f ? nav.yMax + 8f : 150f;
-        float h = panelStyle.CalcHeight(new GUIContent(text), w - 20f) + 12f;
-        var r = new Rect(x, y, w, h);
-        DrawRect(r, new Color(0.06f, 0.035f, 0.025f, 0.78f));
-        GUI.Label(new Rect(x + 10f, y + 6f, w - 20f, h - 12f), text, panelStyle);
-    }
-
-    // The navigation panel (GetState) in IMGUI coordinates, so this panel sits right under it
-    Rect NavPanelRect()
-    {
-        if (navPanel == null || !navPanel.isActiveAndEnabled || !(navPanel.transform is RectTransform rt))
-            return Rect.zero;
-        Canvas canvas = rt.GetComponentInParent<Canvas>();
-        if (canvas == null || canvas.renderMode == RenderMode.WorldSpace) return Rect.zero;
-        Camera cam = canvas.renderMode == RenderMode.ScreenSpaceOverlay ? null : canvas.worldCamera;
-        rt.GetWorldCorners(corners);
-        Vector2 lo = RectTransformUtility.WorldToScreenPoint(cam, corners[0]); // bottom-left
-        Vector2 hi = RectTransformUtility.WorldToScreenPoint(cam, corners[2]); // top-right
-        return Rect.MinMaxRect(lo.x, Screen.height - hi.y, hi.x, Screen.height - lo.y);
-    }
-
     void EnsureStyles()
     {
         if (titleStyle != null) return;
@@ -311,8 +250,6 @@ public class EnvironmentHUD : MonoBehaviour
         textStyle.normal.textColor = Color.white;
         tagStyle = new GUIStyle(GUI.skin.label) { fontSize = fontSize - 3, alignment = TextAnchor.UpperRight };
         tagStyle.normal.textColor = new Color(0.75f, 0.7f, 0.65f, 0.85f);
-        panelStyle = new GUIStyle(GUI.skin.label) { fontSize = fontSize - 1, richText = true, wordWrap = true };
-        panelStyle.normal.textColor = Color.white;
     }
 
     void DrawRect(Rect r, Color c)

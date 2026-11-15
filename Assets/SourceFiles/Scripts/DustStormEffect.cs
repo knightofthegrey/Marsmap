@@ -274,7 +274,7 @@ public class DustStormEffect : MonoBehaviour
     // Full-screen dusty tint: also covers the sky, which fog doesn't reach.
     void OnGUI()
     {
-        if (Intensity <= 0f || peakScreenTint <= 0f) return;
+        if (Intensity <= 0f || peakScreenTint <= 0f || GreenScreen.On) return;
         if (tintTexture == null)
         {
             tintTexture = new Texture2D(1, 1);

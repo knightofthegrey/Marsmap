@@ -52,7 +52,7 @@ public class MapView : MonoBehaviour
     [Tooltip("Plan the route back to Home Base too (R toggles it in the map)")]
     public bool roundTrip = true;
     [Tooltip("Reaching this close (m) to a waypoint shows the next one (the ring on the ground)")]
-    public float arriveDistance = 25f;
+    public float arriveDistance = 9f;
 
     [Header("Home Base")]
     [Tooltip("Show an orange sphere at Home Base (display only, nothing collides with it)")]
@@ -60,7 +60,7 @@ public class MapView : MonoBehaviour
     [Tooltip("Size of the Home Base sphere (m across)")]
     public float homeSphereSize = 12f;
     [Tooltip("Home Base is this far in front of where you're put on the map, so its sphere " +
-             "isn't on top of you (well inside the arrival radius)")]
+             "isn't on top of you")]
     public float homeBaseAhead = 15f;
 
     [Header("Compass arrows")]
@@ -139,6 +139,7 @@ public class MapView : MonoBehaviour
     bool hasTrip;                 // Home Base is known
     int placementsSeen = -1;      // Terraingen.PlayerPlacements when Home Base was taken
     int pendingOffset;            // routeOffset of the plan being waited for
+    bool keepStatusOnReply;       // a re-plan on arrival: keep "Reached waypoint N" on screen
     Transform startTarget;        // what the green arrow points at
     PointAt redArrow, greenArrow; // compass arrows: next waypoint / start of the route
     bool redAdded;                // the red arrow had no PointAt: we added one
@@ -766,7 +767,8 @@ public class MapView : MonoBehaviour
     // Route
     // ---------------------------------------------------------------
     // Plans from where you stand through the waypoints you haven't reached yet
-    void RequestRoute()
+    // keepStatus: a quiet re-plan (on reaching a waypoint), so the arrival message stays
+    void RequestRoute(bool keepStatus = false)
     {
         if (waypoints.Count == 0 || nextWaypoint >= TargetCount)
         {
@@ -799,13 +801,14 @@ public class MapView : MonoBehaviour
         {
             pendingId = req.id;
             pendingAt = Time.unscaledTime;
-            status = "Planning route...";
+            keepStatusOnReply = keepStatus;
+            if (!keepStatus) status = "Planning route...";
         }
         else
         {
             pendingId = -1;
             route = null;
-            status = realMap
+            if (!keepStatus) status = realMap
                 ? "Route planning needs Python/server.py (not connected): straight lines shown."
                 : "No real map (random Perlin terrain), so no route planning: straight lines shown.";
             DrawStraight();
@@ -848,7 +851,10 @@ public class MapView : MonoBehaviour
         pendingId = -1;
         route = m;
         routeOffset = pendingOffset; // only now: until the reply, the old plan stays consistent
-        status = m.ok ? "" : m.error;
+        bool arrival = keepStatusOnReply; // re-planned on reaching a waypoint: draw it from your feet
+        keepStatusOnReply = false;
+        if (!m.ok) status = m.error;
+        else if (!arrival) status = "";
         legRanges.Clear();
         bool hasIndices = false;
         if (m.legs != null)
@@ -859,13 +865,15 @@ public class MapView : MonoBehaviour
             }
         if (!hasIndices && m.x != null) // an older server.py without leg indices: show it all
             for (int i = 0; i < legRanges.Count; i++) legRanges[i] = new Vector2Int(0, m.x.Length - 1);
-        if (m.x != null && m.x.Length > 1) SetRoute(m.x, m.z, m.elev, m.tier, keepLegs: true);
+        // From your feet as you are now: the plan starts where you were when it was asked for,
+        // snapped to the planner's grid, and you may have walked on while it was worked out
+        if (m.x != null && m.x.Length > 1) SetRoute(m.x, m.z, m.elev, m.tier, keepLegs: true, fromFeet: arrival);
         else SetRoute(null, null, null, null);
     }
 
     // keepLegs: legRanges were set from the server's legs; otherwise every point pair is a leg
     // (the straight-line fallback goes waypoint to waypoint)
-    void SetRoute(float[] xs, float[] zs, float[] elev, int[] tier, bool keepLegs = false)
+    void SetRoute(float[] xs, float[] zs, float[] elev, int[] tier, bool keepLegs = false, bool fromFeet = false)
     {
         if (!keepLegs)
         {
@@ -876,13 +884,15 @@ public class MapView : MonoBehaviour
         routeZ = zs;
         routeElev = elev;
         routeTier = tier;
-        DrawGroundRoute();
+        DrawGroundRoute(fromFeet);
         DrawHologramRoute();
     }
 
     // On the real ground: only the leg you're on (you / the last waypoint -> the next one),
     // a flat arrowed line in hazard colours, one LineRenderer per hazard-tier run
-    void DrawGroundRoute()
+    // fromFeet: start at the player's feet, joining the leg where it passes closest to them
+    // (used on reaching a waypoint, until the re-plan from there arrives)
+    void DrawGroundRoute(bool fromFeet = false)
     {
         RouteVersion++;
         foreach (LineRenderer lr in lines) Destroy(lr.gameObject);
@@ -892,6 +902,33 @@ public class MapView : MonoBehaviour
         if (leg < 0 || leg >= legRanges.Count) return;
         int from = Mathf.Clamp(legRanges[leg].x, 0, routeX.Length - 1);
         int to = Mathf.Clamp(legRanges[leg].y, from, routeX.Length - 1);
+        // From your feet: find where the leg passes closest to you (on a piece of it, not just at
+        // a point: a straight-line leg is one piece from the waypoint you just reached), and start
+        // there, so the line never doubles back behind you
+        bool feet = fromFeet && player != null && to > from;
+        Vector3 join = Vector3.zero;
+        if (feet)
+        {
+            var me = new Vector2(player.position.x, player.position.z);
+            float best = float.MaxValue;
+            int bestK = from;
+            for (int k = from; k < to; k++)
+            {
+                var a = new Vector2(routeX[k], routeZ[k]);
+                Vector2 ab = new Vector2(routeX[k + 1], routeZ[k + 1]) - a;
+                float u = ab.sqrMagnitude > 1e-6f ? Mathf.Clamp01(Vector2.Dot(me - a, ab) / ab.sqrMagnitude) : 0f;
+                Vector2 q = a + ab * u;
+                float d = (q - me).sqrMagnitude;
+                if (d < best)
+                {
+                    best = d;
+                    bestK = k;
+                    join = new Vector3(q.x, 0f, q.y);
+                }
+            }
+            from = bestK; // the line starts on this piece (and keeps its hazard colour)
+        }
+        bool first = true;
         foreach (var (start, end, t) in TierRuns(routeTier, to + 1, from))
         {
             LineRenderer lr = MakeLine(routeRoot.transform, tierMats[t], $"Route {TierNames[t]}");
@@ -902,7 +939,16 @@ public class MapView : MonoBehaviour
             // Route points can be 30-100 m apart: add points every ~5 m that follow the ground,
             // or the straight pieces would cut through ridges
             var pts = new List<Vector3>();
-            for (int k = start; k <= end; k++)
+            int k0 = start;
+            if (feet && first) // your feet -> the closest spot on the leg -> on along it, following the ground
+            {
+                var me = new Vector3(player.position.x, 0f, player.position.z);
+                AddGroundPoints(pts, me, join);
+                AddGroundPoints(pts, join, new Vector3(routeX[start + 1], 0f, routeZ[start + 1]));
+                k0 = start + 1; // the rest of this run as usual
+            }
+            first = false;
+            for (int k = k0; k <= end; k++)
             {
                 var a = new Vector3(routeX[k], 0f, routeZ[k]);
                 int steps = 1;
@@ -925,6 +971,20 @@ public class MapView : MonoBehaviour
             lr.widthMultiplier = groundLineWidth;
             lr.textureScale = new Vector2(1f / (groundLineWidth * 3f), 1f); // one arrow per 3 widths
             lines.Add(lr);
+        }
+    }
+
+    // Points every groundLineStep from a to b (b itself not included), on the ground
+    void AddGroundPoints(List<Vector3> pts, Vector3 a, Vector3 b)
+    {
+        float len = new Vector2(b.x - a.x, b.z - a.z).magnitude;
+        if (len < 0.01f) return;
+        int steps = Mathf.Clamp(Mathf.CeilToInt(len / groundLineStep), 1, 64);
+        for (int s = 0; s < steps; s++)
+        {
+            Vector3 p = Vector3.Lerp(a, b, s / (float)steps);
+            p.y = terraingen.GroundY(p) + 0.08f;
+            pts.Add(p);
         }
     }
 
@@ -1023,11 +1083,17 @@ public class MapView : MonoBehaviour
             if (new Vector2(p.x - w.x, p.z - w.z).magnitude < arriveDistance)
             {
                 nextWaypoint++;
-                DrawGroundRoute(); // the next leg appears
+                DrawGroundRoute(fromFeet: true); // the next leg appears, starting where you stand
                 status = nextWaypoint >= TargetCount ? (roundTrip ? "Back at Home Base: route complete!" : "Route complete!") :
                          nextWaypoint >= waypoints.Count ? "Last waypoint reached: head back to Home Base." :
                          $"Reached waypoint {nextWaypoint}.";
                 active = nextWaypoint < TargetCount;
+                // ...and re-plan from your feet, so the line is a proper safe path from here to the
+                // next waypoint (you can be up to arriveDistance from the one you just reached)
+                // Without the server a planned route is kept (re-planning would turn it into
+                // straight lines); a straight-line one is redrawn from you
+                PythonConnection pc = PythonConnection.Instance;
+                if (active && (route == null || (pc != null && pc.IsConnected))) RequestRoute(keepStatus: true);
             }
         }
 
