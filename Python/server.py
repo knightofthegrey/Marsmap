@@ -23,7 +23,7 @@ Usage:
     python server.py export.csv 1025      # custom resolution (2^n + 1)
     python server.py --host 0.0.0.0       # also accept other machines
   then, in a second terminal:
-    python feeder.py --speed 80           # replays real RAD + REMS data
+    python feeder.py                      # replays real RAD + REMS data (4 h EVA in 48 s)
 
 Needs: .venv/bin/pip install -r Python/requirements.txt   (Windows: .venv\\Scripts\\pip ...)
 
