@@ -20,6 +20,7 @@ import builtins
 import hashlib
 import json
 import queue
+import random
 import threading
 import math
 import time
@@ -46,7 +47,7 @@ MAX_RESIDUAL_STD = 60.0  # m; CTX DTMs noisier than this vs. the base are skippe
 MAX_SPIKE = 400.0        # m; CTX pixels this far from the base are treated as bad data
 
 GDAL_ENV = dict(GDAL_HTTP_USERAGENT=UA, GDAL_DISABLE_READDIR_ON_OPEN="EMPTY_DIR",
-                GDAL_HTTP_MAX_RETRY="3", GDAL_HTTP_RETRY_DELAY="2",
+                GDAL_HTTP_MAX_RETRY="8", GDAL_HTTP_RETRY_DELAY="2",  # GDAL backs off between retries
                 CPL_VSIL_CURL_ALLOWED_EXTENSIONS=".tif")
 
 
@@ -225,7 +226,7 @@ def _stac_search(ring):
     while url and len(items) < 1000:
         req = urllib.request.Request(url, data=data,
                                      headers={"User-Agent": UA, "Content-Type": "application/json"})
-        with urllib.request.urlopen(req, timeout=60) as r:
+        with _urlopen_retry(req, timeout=60, what="CTX catalogue search") as r:
             page = json.load(r)
         items += page.get("features", [])
         nxt = next((l for l in page.get("links", []) if l.get("rel") == "next"), None)
@@ -258,7 +259,60 @@ def progress(label, done, total, start=None):
     sys.stdout.flush()
 
 
-_BASE_CONNS = queue.LifoQueue()  # open HTTPS connections to the base DEM, reused
+_BASE_CONNS = queue.LifoQueue()  # (connection, last used) to the base DEM, reused
+# Network patience. One failed row used to abort the whole build after ~10 s; a Wi-Fi blip or
+# the server dropping idle connections is enough for that. Now: fresh connection on every retry,
+# growing waits (~1.5 min in total), and a cap on requests in flight across all tiles at once.
+BASE_RETRIES = 8                 # attempts per row; waits 1, 2, 4, 8, 16, 30, 30 s between them
+BASE_MAX_IN_FLIGHT = 24          # base-DEM requests at once, across all tiles being built
+BASE_IDLE_REUSE_S = 15           # don't reuse a pooled connection idle longer than this
+_BASE_SLOTS = threading.BoundedSemaphore(BASE_MAX_IN_FLIGHT)
+
+
+def _ssl_context():
+    """python.org builds of Python (like the .venv's 3.14) ship without CA certificates, so every
+    HTTPS request fails with CERTIFICATE_VERIFY_FAILED. certifi comes with rasterio; use it."""
+    import ssl
+    try:
+        import certifi
+        return ssl.create_default_context(cafile=certifi.where())
+    except ImportError:
+        return ssl.create_default_context()
+
+
+SSL_CONTEXT = _ssl_context()
+
+
+def _is_cert_error(e):
+    import ssl
+    return isinstance(e, ssl.SSLCertVerificationError) or "CERTIFICATE_VERIFY_FAILED" in str(e)
+
+
+CERT_HELP = ("HTTPS certificate check failed: this Python has no CA certificates. Install them with "
+             "'.venv/bin/pip install certifi' (or run 'Install Certificates.command' from the "
+             "python.org Python folder in Applications).")
+
+
+def _retry_wait(attempt):
+    """Seconds to wait before retry number `attempt` (1, 2, ...): 1, 2, 4, 8, 16, 30, 30 ... + jitter."""
+    return min(30.0, 2.0 ** (attempt - 1)) + random.uniform(0, 1)
+
+
+def _urlopen_retry(req, timeout, tries=6, what="request"):
+    """urllib.request.urlopen with retries and growing waits. Returns the response object."""
+    last = None
+    for attempt in range(1, tries + 1):
+        try:
+            return urllib.request.urlopen(req, timeout=timeout, context=SSL_CONTEXT)
+        except OSError as e:  # URLError, HTTPError, timeouts and SSL errors are all OSErrors
+            last = e
+            if _is_cert_error(e):  # waiting won't fix a missing certificate store
+                raise OSError(f"{what}: {CERT_HELP}") from e
+            if attempt < tries:
+                wait = _retry_wait(attempt)
+                print(f"\n  {what} failed ({e}); retrying in {wait:.0f} s ({attempt}/{tries - 1})")
+                time.sleep(wait)
+    raise OSError(f"{what} failed after {tries} attempts: {last}")
 
 
 def read_base(west, south, east, north, res, threads=48):
@@ -307,28 +361,49 @@ def read_base(west, south, east, north, res, threads=48):
 
     u = urllib.parse.urlparse(BASE_DEM_URL)
 
+    def get_conn(fresh):
+        # Connections are kept open and shared between calls (and tiles): a new secure
+        # connection costs ~0.5 s, a request on an open one ~0.1 s. But the server closes
+        # connections that sit idle, so old ones are dropped, and retries always start fresh.
+        while not fresh:
+            try:
+                conn, last_used = _BASE_CONNS.get_nowait()
+            except queue.Empty:
+                break
+            if time.time() - last_used < BASE_IDLE_REUSE_S:
+                return conn
+            conn.close()
+        return http.client.HTTPSConnection(u.netloc, timeout=60, context=SSL_CONTEXT)
+
     def read_row(r):
         a = off0 + r * stride + c0 * dtype.itemsize
         b = a + ncols * dtype.itemsize - 1
-        for attempt in range(4):
-            # Connections are kept open and shared between calls (and tiles): a new secure
-            # connection costs ~0.5 s, a request on an open one ~0.1 s
+        last = None
+        for attempt in range(1, BASE_RETRIES + 1):
+            conn = get_conn(fresh=attempt > 1)
             try:
-                conn = _BASE_CONNS.get_nowait()
-            except queue.Empty:
-                conn = http.client.HTTPSConnection(u.netloc, timeout=60)
-            try:
-                conn.request("GET", u.path, headers={"Range": f"bytes={a}-{b}", "User-Agent": UA})
-                resp = conn.getresponse()
-                body = resp.read()
+                with _BASE_SLOTS:
+                    conn.request("GET", u.path, headers={"Range": f"bytes={a}-{b}", "User-Agent": UA})
+                    resp = conn.getresponse()
+                    body = resp.read()
                 if resp.status == 206 and len(body) == b - a + 1:
-                    _BASE_CONNS.put(conn)
+                    _BASE_CONNS.put((conn, time.time()))
                     return r, np.frombuffer(body, dtype)
-                raise OSError(f"HTTP {resp.status}")
-            except (OSError, http.client.HTTPException):
+                raise OSError(f"HTTP {resp.status}, {len(body)} of {b - a + 1} bytes")
+            except (OSError, http.client.HTTPException) as e:
                 conn.close()
-                time.sleep(1 + attempt)
-        raise OSError(f"Could not download row {r} of the base DEM")
+                last = e
+                if _is_cert_error(e):  # waiting won't fix a missing certificate store
+                    raise OSError(f"Base DEM row {r}: {CERT_HELP}") from e
+                if attempt < BASE_RETRIES:
+                    wait = _retry_wait(attempt)
+                    if attempt >= 3:  # the first couple of retries are routine; say so after that
+                        print(f"\n  base row {r}: {type(e).__name__}: {e}; retry {attempt} "
+                              f"in {wait:.0f} s", flush=True)
+                    time.sleep(wait)
+        raise OSError(f"Could not download row {r} of the base DEM after {BASE_RETRIES} attempts "
+                      f"(last error: {type(last).__name__}: {last}). Check the internet connection "
+                      f"and run again; finished tiles are cached.")
 
     data, start = {}, time.time()
     with ThreadPoolExecutor(min(threads, len(rows))) as pool:
@@ -402,7 +477,7 @@ def fetch_themis(bounds, width, layer="THEMIS"):
     try:
         # The server returns HTTP 403 for Python's default User-Agent
         req = urllib.request.Request(url, headers={"User-Agent": UA})
-        with urllib.request.urlopen(req, timeout=180) as r:
+        with _urlopen_retry(req, timeout=180, tries=4, what=f"Imagery {layer} download") as r:
             total = int(r.headers.get("Content-Length") or 0)
             chunks, got = [], 0
             while chunk := r.read(256 * 1024):
@@ -963,15 +1038,28 @@ def build_tiles(poly, imagery=True, fetch_themis=fetch_themis, tile_res=TILE_RES
 
     print(f"Building {len(todo)} tiles, {TILE_WORKERS} at a time "
           f"(finished tiles are cached, so an interrupted run picks up where it stopped)")
+    failed = []
     with ThreadPoolExecutor(TILE_WORKERS) as pool:
-        futures = [pool.submit(one, ixz, b) for ixz, b in todo]
+        futures = {pool.submit(one, ixz, b): ixz for ixz, b in todo}
         for n, f in enumerate(as_completed(futures), 1):
-            (ix, iz), r, took = f.result()
+            try:
+                (ix, iz), r, took = f.result()
+            except Exception as e:  # noqa: BLE001  keep building the other tiles; they get cached
+                fx, fz = futures[f]
+                failed.append((fx, fz, e))
+                print(f"\n  tile {n}/{len(todo)} FAILED (column {fx + 1}, row {fz + 1}): {e}")
+                continue
             tiles[(ix, iz)] = {"grid": r["grid"].astype(np.float32), "image": r["image"]}
             how = ("cached" if r["cover"] is None else
                    f"{took:.0f}s, CTX 20 m on {r['cover']:.0f}% of it" if r["cover"] else f"{took:.0f}s")
             print(f"  tile {n}/{len(todo)} done (column {ix + 1}, row {iz + 1}): {how}  "
                   f"[{(time.time() - t0) / 60:.1f} min]")
+
+    if failed:
+        where = ", ".join(f"column {x + 1} row {z + 1}" for x, z, _ in failed)
+        raise RuntimeError(f"{len(failed)} of {len(todo)} tiles failed ({where}). The other "
+                           f"{len(todo) - len(failed)} are cached; run the same command again "
+                           f"to build only the missing tiles. First error: {failed[0][2]}")
 
     grids = {k: v["grid"] for k, v in tiles.items()}
     stitch(grids, nx, nz)
