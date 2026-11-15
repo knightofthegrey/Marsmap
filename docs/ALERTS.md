@@ -7,7 +7,9 @@ The HUD warns the astronaut about three hazards: **dust storms** (early warning)
 | Scenarios | `Python/events.json` (`"type": "scenario"`) | Scripted events that change the replayed readings |
 | Detector | `Python/alerts.py` (`AlertDetector`) | Watches the telemetry only and decides the alerts |
 | Feeder | `Python/feeder.py` | Runs both and sends `telemetry` + `alert` messages |
-| HUD | `Assets/SourceFiles/Scripts/EnvironmentHUD.cs` | Alert cards, beeps, environment panel |
+| HUD | `Assets/SourceFiles/Scripts/EnvironmentHUD.cs` | Alert cards, beeps, banners, environment panel (desktop) |
+| VR HUD | `Assets/SourceFiles/Scripts/VR/EnvironmentHUDVR.cs` | The same, in a headset (Meta Quest 3) |
+| Dust storm | `Assets/SourceFiles/Scripts/DustStormEffect.cs` | Fog, orange tint and blowing dust on the `dust_gust` event (G = test) |
 
 Preview the whole demo without Unity or a server:
 
@@ -134,6 +136,35 @@ The result for Gale is about 45 at 09:00 and about 175 at 11:00. That is consist
 **Inside the suit.** An intact suit blocks this UV, so the alert texts are about visor filters, seals and tears.
 
 **UV-C.** It never reaches the ground on Earth but does on Mars, and the HUD says so.
+
+## On screen
+
+**Desktop** (`EnvironmentHUD.cs`):
+- **Alert cards** sit at the top centre, one per hazard, most severe first.
+  - **Colours:** advisory yellow, warning orange, danger red and pulsing.
+  - **Flash:** a card flashes for 2 s when it appears or gets worse, and a short beep plays at the same moment.
+  - **Tag:** each card says whether it comes from **real data** or a **simulated** event.
+  - **Countdown:** a dust warning counts the storm's arrival down on the EVA clock.
+- **Banners** under the cards show EVA events, notes from Earth and cleared alerts for 6 s.
+- **Environment panel**, under the navigation panel (top-right):
+  - shows the EVA clock and Mars time, radiation (and its normal level), EVA dose, UV index, dust, pressure and air temperature;
+  - each value is coloured by its alert level;
+  - a **SIMULATED** line appears while a scenario is changing the data;
+  - it's hidden while the EVA map (M) is open.
+- **When the EVA finishes**, every alert card and banner clears. An "EVA COMPLETE" banner shows the dose for 6 s.
+
+**In VR** (`VR/EnvironmentHUDVR.cs`): a headset doesn't draw the desktop's IMGUI, so the same cards, banners and panel are rebuilt on the head-locked VR HUD sheet, in the same places (top centre; under the navigation panel). The cards have to stay above the centre of your view, so they're fitted in this order:
+1. **Title lines first.** Every alert and banner gets at least its title line.
+2. **"+N more" always fits.** Anything that doesn't fit is counted in a "+N more" line, and the least important title lines make way for it.
+3. **The newest beep opens first.** Cards then open up in full: the alert that just beeped, then the most severe, the banners, the rest.
+4. **The top card shrinks to make room.** While others are waiting, it's cut to three lines.
+
+A beep is never left without something on screen. See [VR_QUEST.md](VR_QUEST.md).
+
+**Dust storm visuals** (`DustStormEffect.cs`): when the `dust_gust` event arrives (20 s into the demo, lasting 11 s):
+- orange fog rolls in: density 0.03, so ground beyond about 80 m is hidden;
+- the screen takes a 42% orange tint;
+- dust streaks blow past the camera, up to 2,200 per second (fewer in VR).
 
 ## Messages (WebSocket, JSON)
 

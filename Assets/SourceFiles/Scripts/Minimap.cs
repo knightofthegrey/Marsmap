@@ -12,7 +12,7 @@ using UnityEngine.InputSystem;
 ///  - "upcoming hills": the elevation profile of the next stretch of your route (or, without a
 ///    route, of the ground straight ahead), with the climb, descent and steepest grade.
 /// Reads the terrain from Terraingen and the route from MapView. Adds itself at startup.
-/// In a headset it floats in the lower right of your view instead (MinimapVR.cs, VR/).
+/// In a headset it sits bottom-left on the VR HUD sheet, as on desktop (MinimapVR.cs, VR/).
 /// </summary>
 public partial class Minimap : MonoBehaviour
 {
