@@ -1,27 +1,36 @@
 # Martian Map - Python side
 
 ```
-fetch_sol.py --> sol_samples.csv --> feeder.py --ws--> server.py --ws--> Unity  PythonConnection.cs
-                                                          ^   |
-          make_site.py --> site/ (terrain.csv + images) --+   +-- heightmap --> Terraingen.cs
-                         (or a JMARS export.csv)              +-- photo / slope / thermal images --> TerrainOverlay
+fetch_sol.py --> sol_samples.csv --> feeder.py + alerts.py --ws--> server.py --ws--> Unity  PythonConnection.cs
+                 events.json ------------^  (telemetry, alerts,       ^   |
+                                             events)                  |   +-- heightmap / tiles --> Terraingen.cs
+          make_site.py --> site/ (terrain.csv + images) --------------+   +-- photo / slope / thermal --> TerrainOverlay
+          dem_builder.py --> Gale crater tiles (imagery_cache/) ------+   +-- routes (route_planner.py) --> MapView
+                         (or a JMARS export.csv)
+export_offline.py --> Assets/StreamingAssets/Marsmap/ (the same messages, packed into the Quest app; branch vr-quest)
 raster_to_csv.py / prep_terrain.py --> extra map layers (CSV / files), not sent over the socket
 ```
 
 | File | What it does |
 |---|---|
-| `fetch_sol.py` | Downloads one sol of real Curiosity RAD (radiation) + REMS (temperature, pressure) data from NASA PDS and writes `sol_samples.csv` + `sol_samples.meta.json` |
-| `feeder.py` | Replays `sol_samples.csv` and the scripted `events.json` onto the EVA clock, sends JSON to the server |
-| `server.py` | WebSocket server on `ws://localhost:8765`, two jobs: (1) sends Unity the terrain when asked: Gale crater by default (`DEFAULT_POLYGON`, 12 seamless tiles), or `--site`, a `--polygon`, a JMARS CSV, or `--demo`; (2) relays everything the feeder sends to every Unity client, and late joiners get the last status + telemetry |
+| `fetch_sol.py` | Downloads one sol of real Curiosity RAD (radiation) + REMS (temperature, pressure, and the six UV bands) data from NASA PDS and writes `sol_samples.csv` + `sol_samples.meta.json` |
+| `feeder.py` | Replays `sol_samples.csv` and `events.json` onto the EVA clock (300×: a 4-hour EVA in 48 s), runs the alert detector, sends telemetry, alerts and events to the server. `--timeline` prints what it will send, without a server |
+| `alerts.py` | The environment alert system: scripted **scenarios** (a dust front, a solar particle event) that change the replayed readings, and an **AlertDetector** that sees only the telemetry and raises dust / radiation / UV alerts. Thresholds and sources: [docs/ALERTS.md](../docs/ALERTS.md) |
+| `server.py` | WebSocket server on port 8765, three jobs: (1) sends Unity the terrain when asked: Gale crater by default (`DEFAULT_POLYGON`, 12 seamless tiles), or `--site`, a `--polygon`, a JMARS CSV, or `--demo`; (2) relays everything the feeder sends to every Unity client, and late joiners get the last status + telemetry; (3) plans EVA routes for the map (`plan_route` -> `route`, with `route_planner.py`) |
+| `route_planner.py` | A* route planning on the terrain Unity shows, with the team's rules from `Mars_mapping(3).ipynb`: hazard zones by tilt (0-10° optimal, 10-20 caution, 20-30 high risk, >30 impassable), no step over 18° and no ground over 25° side slope, Tobler EVA time, EASY / MODERATE / HARD |
+| `dem_builder.py` | Builds terrain for any polygon: MOLA-HRSC 200 m base with every USGS CTX DTM (20 m) that overlaps, levelled and feathered; THEMIS day IR + CTX imagery. Cached in `Python/imagery_cache/`. Used by `server.py`'s default Gale map and `--polygon` |
+| `export_offline.py` | *(branch `vr-quest`)* Writes the Quest app's offline bundle (`Assets/StreamingAssets/Marsmap/`): exactly the messages the server and feeder would send. HiRISE site by default; `--demo`, a CSV or `--polygon` too. Rebuild the app afterwards |
+| `Mars_mapping.ipynb`, `Mars_mapping(3).ipynb` | The team's notebooks: route between spots and the "Martian Trail Recommender", the source of `route_planner.py`'s rules |
 | `make_site.py` | **Real terrain**: HiRISE terrain model + colour photo + slope + thermal inertia around Curiosity's sol-4560 position -> `site/` |
 | `site/` | Made by `make_site.py`: `terrain.csv`, `photo.jpg`, `slope.jpg`, `thermal.jpg`, `site.json` (about 13 MB) |
-| `requirements.txt` | Server, feeder and `fetch_sol.py` (numpy, websockets) |
-| `requirements-maps.txt` | Adds rasterio, pyproj, pillow for `make_site.py`, `raster_to_csv.py` and `prep_terrain.py` only |
+| `requirements.txt` | Server (`--site`, CSV, `--demo`), feeder, alerts, route planner, `fetch_sol.py` (numpy, websockets) |
+| `requirements-maps.txt` | Adds rasterio, pyproj, pillow: needed for the default Gale map / `--polygon` (`dem_builder.py`), `make_site.py`, `raster_to_csv.py`, `prep_terrain.py` |
 | `raster_to_csv.py` | Any map raster (GeoTIFF / ISIS cube, local or URL) -> CSV grid over a 2 km box: thermal inertia, elevation, or slope with ok / caution / no-go classes |
 | `prep_terrain.py` | HiRISE terrain model + photo -> Unity heightmap, photo, slope, route-cost grid, meta.json |
 | `sol_samples.csv` | **Real data**: sol 4560 (2025-06-03), 09:00-13:00 Mars local time. Regenerate with `fetch_sol.py` |
 | `sol_samples.meta.json` | Exactly which NASA files the CSV came from; the feeder reads its `source` for the HUD credit |
-| `events.json` | Scripted demo events (dust gust, nav degraded, Earth note). Hand-written, not from a dataset |
+| `events.json` | Scripted demo events (Earth note, dust gust, nav degraded) and the two **scenarios** (`dust_front`, `solar_particle_event`) that `alerts.py` applies to the readings. Hand-written, shaped on measured Mars events |
+| `imagery_cache/` | `dem_builder.py`'s downloads (not in git). The repo root's `gale_terrain_tiles.zip` holds a pre-built copy: unzip it in the repo folder and the Gale map loads without downloading |
 
 ## Run the demo
 
@@ -40,25 +49,37 @@ python3 Python/server.py                      # terminal 1: Gale crater (12 tile
 python3 Python/server.py --site               #   ...or the Curiosity HiRISE site in Python/site/
 python3 Python/server.py --demo               #   ...or the fake demo terrain
 python3 Python/server.py export.csv 1025      #   ...or a JMARS pixel export
+python3 Python/server.py --site --host 0.0.0.0  #   ...also accept a headset on the same Wi-Fi (vr-quest's server prints the address)
 python3 Python/feeder.py                      # terminal 2: 4-hour EVA in 48 s (demo pace)
 python3 Python/feeder.py --speed 80           #   ...or slower, 3 minutes
+python3 Python/feeder.py --timeline           # print every alert and event the replay sends, no server needed
 ```
 
 The feeder finds `sol_samples.csv` and `events.json` next to itself, whatever folder you run it from.
 
 Demo timeline at the default speed (start the feeder once Unity is in Play mode):
 
-| Real time | Event | In Unity |
+| Real time | On screen | Driven by |
 |---|---|---|
-| ~8 s | Earth note | Console |
-| ~20 s | Dust gust (`duration_s` 13) | Orange fog (ground fades past ~50-150 m), dimmed sun, dusty tint, blowing dust; clears by ~33 s (`DustStormEffect`, press G to test) |
-| ~35 s | Navigation degraded | Console |
-| ~48 s | EVA finished | Console |
+| 0 s | UV BEYOND EARTH RECORD (UV index ~45) | real UV |
+| ~8 s | Banner: note from Earth | script |
+| ~15.5-17 s | DUST WATCH (UV dimming, then a 3.7 Pa dust-devil pressure dip) | detector, simulated dust front |
+| ~18-19.5 s | DUST WARNING with the storm's arrival counted down | detector |
+| ~20 s | Dust gust (fog, tint, blowing dust for 11 s) + DUST STORM | script + detector |
+| ~31 s | UV DANGER: the dust clears and UV index jumps to ~165 | real UV |
+| ~33 s | DUST CLEARED | detector |
+| ~35 s | Banner: navigation degraded | script |
+| ~38-44.5 s | RADIATION RISING, SOLAR PARTICLE EVENT, RADIATION: SHELTER NOW | detector, simulated solar event |
+| ~48 s | EVA finished: alerts clear, dose 0.144 mGy | |
 
-Press Play in Unity at any point. `PythonConnection` retries every 2 s until the server is up,
-asks for the heightmap once (Terraingen falls back to Perlin terrain if none arrives in 5 s), and
-logs events / Earth notes to the Console. Tick **Log Messages** on the component to see every
-message. For a quick test run use `--speed 3600 --tick 0.05` (4 seconds).
+Details and sources: [docs/ALERTS.md](../docs/ALERTS.md).
+
+Press Play in Unity before starting the feeder (alerts sent before Unity connects are missed).
+`PythonConnection` retries every 2 s until the server is up, asks for the heightmap once
+(Terraingen falls back to Perlin terrain if none arrives in 5 s), and logs events, alerts and Earth
+notes to the Console. Tick **Log Messages** on the component to see every message. For a quick
+test run use `--speed 3600 --tick 0.05` (4 seconds); at high speeds lower `--tick`, or the alert
+detector sees too few samples and skips levels.
 
 ## Real terrain + photo overlays (HiRISE)
 
@@ -105,11 +126,14 @@ Sources (credits are in `site.json` too):
 | Data | From | Script | Used for |
 |---|---|---|---|
 | Radiation dose rate | Curiosity RAD, [PDS PPI node](https://pds-ppi.igpp.ucla.edu/data/MSL-M-RAD-3-RDR-V1.0/) | `fetch_sol.py` | HUD dose + accumulated dose |
-| Air temperature, pressure | Curiosity REMS, [PDS Atmospheres node](https://atmos.nmsu.edu/PDS/data/mslrem_1001/) | `fetch_sol.py` | HUD weather |
+| Air temperature, pressure | Curiosity REMS `RMD` product, [PDS Atmospheres node](https://atmos.nmsu.edu/PDS/data/mslrem_1001/) | `fetch_sol.py` | HUD weather, dust detection (pressure dips) |
+| UV (bands A, B, C, ABC, D, E) | Curiosity REMS `RNV` product (same node; `RMD` marks midday UV as unknown) | `fetch_sol.py` | UV index, UV alerts, dust detection (UV dimming) |
 | Thermal inertia (sand vs rock) | Mars Odyssey THEMIS, [USGS tile 30S120E](https://astrogeology.usgs.gov/search/map/themis_thermal_inertia_mosaic_quantitative_30s120e_100mpp) | `make_site.py`, `raster_to_csv.py` | Thermal layer, hazard layer |
 | Elevation, slope | MRO HiRISE terrain models, [USGS STAC](https://stac.astrogeology.usgs.gov/api/collections/mro_hirise_socet_dtms) | `make_site.py`, `raster_to_csv.py`, `prep_terrain.py` | Terrain, no-go areas, route |
 | Photo | MRO HiRISE colour mosaic of Gale (USGS) / HiRISE orthoimages | `make_site.py`, `prep_terrain.py` | Texture on the terrain |
 | Rover position | NASA MSL waypoints | `make_site.py` | Centre of the site |
+| Elevation, big map | [MOLA-HRSC blend, 200 m](https://asc-pds-services.s3.us-west-2.amazonaws.com/mosaic/Mars/HRSC_MOLA_Blend/Mars_HRSC_MOLA_BlendDEM_Global_200mp_v2.tif) + USGS CTX DTMs, 20 m ([STAC](https://stac.astrogeology.usgs.gov/api/search)) | `dem_builder.py` | Gale crater tiles, `--polygon` |
+| Imagery, big map | THEMIS day IR (100 m) + CTX orthoimages (6 m) | `dem_builder.py` | Photo on the tiles |
 
 **No wind.** Curiosity's REMS wind sensor has returned no data for years, so wind is not in the CSV,
 the telemetry, or Unity's `TelemetryMessage`. Don't show a wind reading on the HUD.
@@ -156,12 +180,16 @@ void OnDestroy() { if (PythonConnection.Instance) PythonConnection.Instance.Tele
 void OnTelemetry(TelemetryMessage t) => doseText.text = $"{t.dose_total_mGy:F3} mGy";
 ```
 
-Also available: `EventReceived`, `EarthNoteReceived`, `StatusReceived`, `ConnectionChanged`,
-`LatestTelemetry`, `IsConnected`, and `SendJson(...)` for Unity -> Python messages (the server logs them).
+Also available: `AlertReceived`, `EventReceived`, `EarthNoteReceived`, `StatusReceived`, `RouteReceived`,
+`ConnectionChanged`, `LatestTelemetry`, `IsConnected`, and `SendJson(...)` for Unity -> Python messages.
 
 ## Message schema
 
-Documented at the top of `feeder.py`; the matching C# classes are at the top of `PythonConnection.cs`.
-Telemetry carries `t_eva_s, lmst_h` (Mars local time in hours), `dose_rate_uGy_h, dose_total_mGy,
-temp_c, pressure_pa, source`. Agree changes with the server and Unity owners, and bump `"v"` on
-both sides if the shape changes.
+Documented at the top of `feeder.py` and `server.py`; the matching C# classes are at the top of
+`PythonConnection.cs`; the full table is in [docs/PROJECT_REPORT.md §9](../docs/PROJECT_REPORT.md#9-messages-between-python-and-unity).
+- **Telemetry** carries `t_eva_s, lmst_h` (Mars local time in hours), `dose_rate_uGy_h, dose_total_mGy, temp_c, pressure_pa, uv_a_wm2 … uv_e_wm2, source`, plus the detector's estimates `uv_index, dust_tau, pressure_anomaly_pa, dose_expected_uGy_h` and `scenario` (non-empty while a simulated event changes the data).
+- **Alerts:** `{"type":"alert", "category": dust | radiation | uv, "level": advisory | warning | danger | clear, "title", "text", "update", "value", "eta_min"}`.
+- **Routes:** Unity sends `plan_route` with waypoints and gets a `route` back.
+- **Binary:** terrain arrives as binary `HMAP` (one terrain) or `TILE` + `TIMG` (tiles), and the layer images as `TEXL`.
+
+Agree changes with the server and Unity owners, and bump `"v"` on both sides if the shape changes.
