@@ -65,6 +65,58 @@ public class SiteLayer
 }
 
 [Serializable]
+public class RouteRequest
+{
+    public int v = PythonConnection.SchemaVersion;
+    public string type = "plan_route";
+    public int id;
+    public float[] x;      // Unity world metres; the first point is where the astronaut is
+    public float[] z;
+    public bool loop;      // come back to the first point
+    public bool return_to_start; // the last point is the route's start: only changes the wording
+}
+
+[Serializable]
+public class RouteLeg
+{
+    public string from_wp;   // "start", "1", "2", ...
+    public string to_wp;
+    public bool ok;          // false = no safe path on this leg
+    public float distance_m;
+    public float minutes;
+    public int start_index;  // this leg is points x[start_index..end_index] of the route
+    public int end_index;
+}
+
+// Reply to RouteRequest, planned by Python/route_planner.py (rules from Mars_mapping(3).ipynb)
+[Serializable]
+public class RouteMessage
+{
+    public int v;
+    public string type;
+    public int id;
+    public bool ok;
+    public string error;
+    public float[] x;        // route points, Unity world metres
+    public float[] z;
+    public float[] elev;     // real elevation (m)
+    public int[] tier;       // 0 optimal, 1 caution, 2 high risk, 3 impassable, 4 no safe path
+    public RouteLeg[] legs;
+    public float distance_m;
+    public float minutes;    // EVA time (Tobler's hiking function for Mars)
+    public float gain_m;
+    public float loss_m;
+    public float max_climb_deg;
+    public float max_descent_deg;
+    public float max_side_deg;
+    public string difficulty; // EASY / MODERATE / HARD
+    public float score;
+    public float[] zone_pct;  // share of the distance in each tier
+    public string[] hazards;
+    public float spacing_m;   // planning grid spacing
+}
+
+[Serializable]
 public class SiteMessage
 {
     public int v;
@@ -117,6 +169,7 @@ public class PythonConnection : MonoBehaviour
     public event Action<EvaEventMessage> EventReceived;
     public event Action<EarthNoteMessage> EarthNoteReceived;
     public event Action<StatusMessage> StatusReceived;
+    public event Action<RouteMessage> RouteReceived;
 
     public bool IsConnected => websocket != null && websocket.State == WebSocketState.Open;
     public TelemetryMessage LatestTelemetry { get; private set; }
@@ -293,6 +346,9 @@ public class PythonConnection : MonoBehaviour
             case "site":
                 HandleSite(JsonUtility.FromJson<SiteMessage>(json));
                 break;
+            case "route":
+                RouteReceived?.Invoke(JsonUtility.FromJson<RouteMessage>(json));
+                break;
             case "welcome":
                 break;
             default:
@@ -354,6 +410,14 @@ public class PythonConnection : MonoBehaviour
         if (terraingen == null) terraingen = FindAnyObjectByType<Terraingen>();
         overlay = (terraingen != null ? terraingen.gameObject : gameObject).AddComponent<TerrainOverlay>();
         return overlay;
+    }
+
+    /// <summary>Ask the server to plan an EVA route (reply: RouteReceived). False if offline.</summary>
+    public bool RequestRoute(RouteRequest request)
+    {
+        if (!IsConnected) return false;
+        SendJson(JsonUtility.ToJson(request));
+        return true;
     }
 
     /// <summary>Send a raw JSON string to the server. Dropped silently if not connected.</summary>

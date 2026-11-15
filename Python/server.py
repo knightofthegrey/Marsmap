@@ -52,6 +52,16 @@ Heightmap binary message layout (little-endian):
     float32   size Z (m, north-south)
     N*N uint16 heights, row 0 = south, last row = north
 
+Route planning (Unity's map, press M): Unity sends
+    {"v":1, "type":"plan_route", "id":N, "x":[...], "z":[...], "loop":false, "return_to_start":false}
+with points in Unity world metres (first = the astronaut), and gets back
+    {"v":1, "type":"route", "id":N, "ok", "error", "x", "z", "elev", "tier", "legs",
+     (each leg: from_wp, to_wp, ok, distance_m, minutes, start_index, end_index into x/z;
+      from_wp "start" = the astronaut, to_wp "home" = Home Base, where the route began),
+     "distance_m", "minutes", "gain_m", "loss_m", "max_climb_deg", "max_descent_deg",
+     "max_side_deg", "difficulty", "score", "zone_pct", "hazards", "spacing_m"}
+planned by route_planner.py with the A* / hazard / EVA-time rules from Mars_mapping(3).ipynb.
+
 Tile message (--polygon too big for one terrain), one per tile, little-endian:
     4 bytes   magic "TILE"
     int32 x6  ix, iz (column from west, row from south), nx, nz, count (tiles being sent), res
@@ -89,11 +99,13 @@ import argparse
 import asyncio
 import json
 import struct
+import time
 
 try:
     import numpy as np
     from websockets.asyncio.server import broadcast, serve
     from websockets.exceptions import ConnectionClosed
+    import route_planner  # EVA routes for Unity's map (numpy only)
 except ModuleNotFoundError as e:
     sys.exit(f"Missing library: {e.name}\n"
              "Create the venv first (from the Marsmap folder):\n"
@@ -233,12 +245,15 @@ def prepare_messages(csv_path, res, demo=False):
     if demo or not csv_path:
         if demo:
             print("--demo: using demo terrain")
-        return [build_message(*demo_heightmap(res))]
+        grid, sx, sz = demo_heightmap(res)
+        set_route_dem(route_planner.WorldDEM.single(grid, sx, sz))
+        return [build_message(grid, sx, sz)]
     if not os.path.isfile(csv_path):
         sys.exit(f"CSV not found: {os.path.abspath(csv_path)}\n"
                  "Paths are relative to the folder you run the command from.")
     site_msg, images = load_site(csv_path)
     grid, sx, sz = load_jmars_csv(csv_path, res)
+    set_route_dem(route_planner.WorldDEM.single(grid, sx, sz))
     return ([site_msg] if site_msg else []) + [build_message(grid, sx, sz)] + images
 
 
@@ -257,6 +272,7 @@ def prepare_tiled_polygon(poly, max_tiles):
             "center_lat": t["center_lat"], "center_lon": t["center_lon"] % 360,  # = Unity origin
             "size_m": max(t["nx"] * tx, t["nz"] * tz), "vertical_exaggeration": 1.0,
             "layers": []}
+    set_route_dem(route_planner.WorldDEM.tiles(t))
     msgs = [json.dumps(site)]
     for ix, iz in keys:
         tile = t["tiles"][(ix, iz)]
@@ -299,6 +315,7 @@ def prepare_polygon(text, path, res, max_tiles=16):
             "center_lat": (south + north) / 2, "center_lon": ((west + east) / 2) % 360,
             "size_m": max(r["size_x"], r["size_z"]), "vertical_exaggeration": 1.0,
             "layers": layers}
+    set_route_dem(route_planner.WorldDEM.single(r["grid"], r["size_x"], r["size_z"]))
     return [json.dumps(site), build_message(r["grid"], r["size_x"], r["size_z"])] + images
 
 
@@ -318,6 +335,36 @@ def describe_terrain(messages):
 
 
 TERRAIN_MESSAGES = []   # sent in this order on request_heightmap (str = text frame, bytes = binary)
+ROUTE_DEM = None        # the same terrain as heights in Unity world metres, for plan_route
+
+
+def set_route_dem(dem):
+    global ROUTE_DEM
+    ROUTE_DEM = dem
+
+
+async def handle_plan_route(ws, msg, peer):
+    """Plan an EVA route for Unity's map on a worker thread (telemetry keeps flowing)."""
+    reply = {"v": SCHEMA_VERSION, "type": "route", "id": msg.get("id", 0)}
+    try:
+        xs, zs = msg.get("x") or [], msg.get("z") or []
+        if ROUTE_DEM is None:
+            result = dict(ok=False, error="The server has no terrain to plan on")
+        elif len(xs) != len(zs) or len(xs) < 2:
+            result = dict(ok=False, error="Add at least one waypoint")
+        else:
+            t = time.time()
+            result = await asyncio.to_thread(route_planner.plan, ROUTE_DEM,
+                                             list(zip(xs, zs)), bool(msg.get("loop")),
+                                             bool(msg.get("return_to_start")))
+            if result.get("distance_m") is not None:
+                print(f"    route for {peer}: {len(xs) - 1} waypoint(s), "
+                      f"{result['distance_m'] / 1000:.2f} km, {result['minutes']:.0f} min, "
+                      f"{result['difficulty']}, planned in {time.time() - t:.1f}s")
+    except Exception as e:  # noqa: BLE001  (a bad request must not drop the connection)
+        result = dict(ok=False, error=f"Route planning failed: {e}")
+    reply.update(result)
+    await ws.send(json.dumps(reply))
 
 
 # ---- Live data relay (feeder -> Unity) -------------------------------------
@@ -368,6 +415,10 @@ async def handler(ws):
                 for m in TERRAIN_MESSAGES:  # str -> text frame, bytes -> binary frame
                     await ws.send(m)
                 print(f"    sent {describe_terrain(TERRAIN_MESSAGES)} to {peer}")
+                continue
+
+            if kind == "plan_route":
+                await handle_plan_route(ws, msg, peer)
                 continue
 
             if ws in feeders:

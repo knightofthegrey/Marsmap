@@ -20,6 +20,9 @@ public class CharacterMover : MonoBehaviour
     [Tooltip("Left empty: Space")]
     [SerializeField] private InputAction jumpAction;
 
+    [Tooltip("Set by other scripts (e.g. the M map) to ignore walk/jump keys; gravity keeps working")]
+    public bool inputLocked;
+
     private CharacterController controller;
     private Vector3 verticalVelocity;
     private bool warnedNoCamera;
@@ -84,7 +87,7 @@ public class CharacterMover : MonoBehaviour
 
     private void HandleMovement()
     {
-        Vector2 input = moveAction.ReadValue<Vector2>();
+        Vector2 input = inputLocked ? Vector2.zero : moveAction.ReadValue<Vector2>();
 
         // Align player yaw with the Cinemachine Pan angle (or keep the current yaw without one)
         float yaw;
@@ -119,7 +122,7 @@ public class CharacterMover : MonoBehaviour
             verticalVelocity.y = -2f;
         }
 
-        if (jumpAction.WasPressedThisFrame() && controller.isGrounded)
+        if (!inputLocked && jumpAction.WasPressedThisFrame() && controller.isGrounded)
         {
             verticalVelocity.y = Mathf.Sqrt(jumpHeight * -2f * gravity);
         }
