@@ -615,9 +615,6 @@ Key: ✅ done · 🟡 partly done · ⬜ not started
 ## 12. Known limitations and open issues
 
 **Not built yet**
-- **On-screen data:** HUD readouts (dose, temperature, pressure, EVA clock, Mars time) and banners for the Earth note and nav warning.
-  - The Earth note and nav warning appear only in the Unity Console.
-  - The telemetry values aren't shown in Unity at all: only in the `server.py` terminal, or in the Console if `PythonConnection`'s **Log Messages** is ticked.
 - **Navigation and science:** route display (see `python_route`), science stops, home and next-target arrows, rover POV photos, minimap.
 
 **Lighting**
@@ -674,3 +671,4 @@ Key: ✅ done · 🟡 partly done · ⬜ not started
 | 14 Nov 2026 | `3f57daa` | Mars sky; matte height colours (fixed "blue hills"); lighter dust |
 | 14 Nov 2026 | `89b8d8c` | `server.py` help text: plain `feeder.py` (4 h EVA in 48 s, the 300× default) |
 | 14 Nov 2026 | (uncommitted) | This report, fact-checked against code, scene, git and all linked sources |
+| 15 Nov 2026 | (uncommitted) | Environment alerts: dust early warning, radiation and UV alerts (`alerts.py`, `EnvironmentHUD.cs`); real REMS UV added to `sol_samples.csv`; on-screen telemetry panel and event/Earth-note banners. See [ALERTS.md](ALERTS.md) |

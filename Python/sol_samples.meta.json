@@ -16,6 +16,13 @@
       "https://atmos.nmsu.edu/PDS/data/mslrem_1001/DATA/SOL_04489_04612/SOL04560/RME_802257765RMD45600000000_______P1.TAB"
     ]
   },
+  "rems_uv": {
+    "files": [
+      "https://atmos.nmsu.edu/PDS/data/mslrem_1001/DATA/SOL_04489_04612/SOL04560/RME_802257765RNV45600000000_______P1.TAB"
+    ],
+    "product": "RNV (calibrated environmental RDR)",
+    "unit": "W/m^2"
+  },
   "not_available": {
     "wind_ms": "REMS wind sensor returns no data for these sols"
   },

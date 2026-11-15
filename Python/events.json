@@ -1,5 +1,16 @@
 [
   {"t_eva_min": 40, "type": "earth_note", "text": "Science team: image the vein at Stop 2 before sampling.", "delay_s": 840},
-  {"t_eva_min": 100, "type": "event", "id": "dust_gust", "severity": "caution", "text": "Dust gust, visibility dropping. Consider heading home early.", "duration_s": 13},
-  {"t_eva_min": 175, "type": "event", "id": "nav_degraded", "severity": "warning", "text": "Navigation degraded: use landmarks and the home bearing."}
+
+  {"t_eva_min": 65, "type": "scenario", "id": "dust_front",
+   "arrive_min": 100, "clear_min": 140, "end_min": 160,
+   "tau_at_arrival": 1.5, "tau_peak": 2.0, "ramp_min": 10,
+   "pressure_drop_pa": 2.0, "dips": [[25, 0.8], [15, 3.2]], "temp_drop_c": 3.0,
+   "note": "SIMULATED local dust front, shaped on REMS/MEDA observations (docs/ALERTS.md): extra dust opacity dims the real UV, dust devils dip the pressure, the air cools."},
+  {"t_eva_min": 100, "type": "event", "id": "dust_gust", "severity": "caution", "text": "Dust gust, visibility dropping. Consider heading home early.", "duration_min": 55},
+
+  {"t_eva_min": 175, "type": "event", "id": "nav_degraded", "severity": "warning", "text": "Navigation degraded: use landmarks and the home bearing."},
+
+  {"t_eva_min": 180, "type": "scenario", "id": "solar_particle_event",
+   "peak_min": 233, "peak_uGy_h": 334, "decay_min": 900,
+   "note": "SIMULATED solar particle event shaped on the 20 May 2024 event at Gale (peak ~340 uGy/h 53 min after onset; docs/ALERTS.md), added to the real RAD dose rate."}
 ]
