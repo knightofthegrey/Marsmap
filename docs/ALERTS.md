@@ -1,6 +1,6 @@
 # Environment alert system
 
-The HUD warns the astronaut about three hazards: **dust storms** (early warning), **radiation** and **UV**.
+The heads-up display (HUD) warns the astronaut about three hazards: **dust storms** (early warning), **radiation** and **ultraviolet (UV)**.
 
 | Part | File | Job |
 |---|---|---|
@@ -8,7 +8,7 @@ The HUD warns the astronaut about three hazards: **dust storms** (early warning)
 | Detector | `Python/alerts.py` (`AlertDetector`) | Watches the telemetry only and decides the alerts |
 | Feeder | `Python/feeder.py` | Runs both and sends `telemetry` + `alert` messages |
 | HUD | `Assets/SourceFiles/Scripts/EnvironmentHUD.cs` | Alert cards, event banners, beeps (desktop) |
-| VR HUD | `Assets/SourceFiles/Scripts/VR/EnvironmentHUDVR.cs` | The same in a headset, plus the environment panel *(branch `vr-quest`)* |
+| Virtual reality (VR) HUD | `Assets/SourceFiles/Scripts/VR/EnvironmentHUDVR.cs` | The same in a headset, plus the environment panel *(branch `vr-quest`)* |
 | Dust storm | `Assets/SourceFiles/Scripts/DustStormEffect.cs` | Fog, orange tint and blowing dust on the `dust_gust` event (G = test) |
 
 Preview the whole demo without Unity or a server:
@@ -22,8 +22,8 @@ python Python/feeder.py --timeline
 The replayed sol (Curiosity sol 4560, 09:00–13:00 Mars time) was calm. There was no dust storm and no solar storm.
 
 **Real data (sol 4560):**
-- **RAD dose rate:** about 6 µGy/h.
-- **REMS pressure and temperature.**
+- **Radiation Assessment Detector (RAD) dose rate:** about 6 µGy/h.
+- **Rover Environmental Monitoring Station (REMS) pressure and temperature.**
 - **REMS UV**, six bands, taken from the calibrated RNV product.
   - `fetch_sol.py` now downloads these too.
   - The RMD product used for temperature and pressure marks midday UV as unknown (−999). That is why UV comes from RNV instead.
@@ -38,7 +38,7 @@ Both are shaped on measured Mars events (sources below). While one of them is ch
 
 ## Demo timeline (default speed: 300×, the 4-hour EVA in 48 s)
 
-| Real s | EVA | Alert | Driven by |
+| Real s | EVA (extravehicular activity) clock | Alert | Driven by |
 |---|---|---|---|
 | 0 | 0:00 | UV BEYOND EARTH RECORD (UV index ~45) | real UV |
 | 8 | 0:40 | Note from Earth | script (existing) |
@@ -69,8 +69,8 @@ It uses the median of the last 5 EVA minutes, which ignores one-off dips. A line
 
 | Level | Trigger | Basis |
 |---|---|---|
-| DUST WATCH | extra τ ≥ 0.10 and rising, or a pressure dip ≥ 2.5 Pa | 0.10 above baseline is the "large" short-dust-event criterion at Gale (Smith et al., NTRS 20190001691). A dip of more than 2.5 Pa means a dust devil is likely lifting dust (Mars 2020 MEDA studies). |
-| DUST WARNING | UV down ≥ 30% (τ ≈ +0.9), or storm projected within 30 EVA min | Dust-driven UV changes of more than 30% were seen at Gale (Viúdez-Moreiras et al. 2025, PNAS) |
+| DUST WATCH | extra τ ≥ 0.10 and rising, or a pressure dip ≥ 2.5 Pa | 0.10 above baseline is the "large" short-dust-event criterion at Gale (Smith et al., NTRS 20190001691; NTRS is the National Aeronautics and Space Administration's (NASA) Technical Reports Server). A dip of more than 2.5 Pa means a dust devil is likely lifting dust (Mars 2020 Mars Environmental Dynamics Analyzer (MEDA) studies). |
+| DUST WARNING | UV down ≥ 30% (τ ≈ +0.9), or storm projected within 30 EVA min | Dust-driven UV changes of more than 30% were seen at Gale (Viúdez-Moreiras et al. 2025, Proceedings of the National Academy of Sciences (PNAS)) |
 | DUST STORM | extra τ ≥ 1.5 (total τ ≈ 2, UV down about 45%) | τ ≈ 2 is a localized storm (Cockell et al. 2000). Jezero's 2022 regional storm peaked near 2. |
 | Cleared | extra τ < 0.10 for 5 EVA min | |
 
@@ -99,7 +99,7 @@ These magnitudes follow observed values. **The timing is compressed:** real Gale
 |---|---|---|
 | RADIATION RISING | dose rate ≥ 1.25× normal | The RAD team's SPE trigger at the Mars surface: 15-min detector E data, 1.25× background (Löwe et al. 2025, arXiv:2502.02469) |
 | SOLAR PARTICLE EVENT | still ≥ 1.25× after 5 EVA min (confirmed), or ≥ 2× normal | Löwe et al.: requiring two consecutive samples gives 0% false alarms. The 2× level is our demo choice, based on Sept 2017, when the rate doubled within about 7 h (Zeitlin et al. 2018). |
-| SHELTER NOW | ≥ 150 µGy/h (2.5 µGy/min) | NASA SRAG's Orion shelter analysis (Semones, WRMISS-26): crews stay sheltered above this |
+| SHELTER NOW | ≥ 150 µGy/h (2.5 µGy/min) | The Orion shelter analysis by NASA's Space Radiation Analysis Group, SRAG (Semones, at WRMISS-26, the 26th Workshop on Radiation Monitoring for the International Space Station): crews stay sheltered above this |
 | Cleared | < 1.25× normal for 10 EVA min | |
 
 **The scripted SPE** (`solar_particle_event`) is shaped on **20 May 2024**, the largest event Curiosity has measured at the surface:
@@ -107,7 +107,7 @@ These magnitudes follow observed values. **The timing is compressed:** real Gale
 - **Duration:** it stays elevated for about 42 hours.
 - **Total dose:** about 1.7–2 mGy.
 
-The script reaches a 334 µGy/h peak 53 minutes after onset, then declines slowly. The SRAG and OCHMO guidance behind the alert texts:
+The script reaches a 334 µGy/h peak 53 minutes after onset, then declines slowly. The SRAG and Office of the Chief Health and Medical Officer (OCHMO) guidance behind the alert texts:
 - shelter set-up within about 30 minutes;
 - ending an EVA within the first 1–2 hours avoids most of an event's dose;
 - stay within 30 minutes of shelter.
@@ -120,8 +120,8 @@ The script reaches a 334 µGy/h peak 53 minutes after onset, then declines slowl
 
 **Estimated UV index.** This is our estimate; there is no published "Mars UV index".
 1. Convert each REMS RNV channel to its full-band value. The factors are UV-C ×2.2, UV-B ×3.2 and UV-A ×5.5. We got them by comparing this sol's readings with the corrected Gale band averages in Viúdez-Moreiras et al. 2025 (PNAS). They are not a published calibration.
-2. Weight each band by the CIE sunburn (erythemal) action spectrum: UV-C ×1.0, UV-B ×0.5, UV-A ×0.002.
-3. UV index = 40 × the weighted sum in W/m² (WHO definition).
+2. Weight each band by the International Commission on Illumination (CIE) sunburn (erythemal) action spectrum: UV-C ×1.0, UV-B ×0.5, UV-A ×0.002.
+3. UV index = 40 × the weighted sum in W/m² (World Health Organization (WHO) definition).
 
 The result for Gale is about 45 at 09:00 and about 175 at 11:00. That is consistent with Cockell et al. 2000, who found Mars sunburn UV about 25× Earth's.
 
@@ -153,7 +153,7 @@ The result for Gale is about 45 at 09:00 and about 175 at 11:00. That is consist
   - it's hidden while the EVA map (M) is open.
 - **When the EVA finishes**, every alert card and banner clears. An "EVA COMPLETE" banner shows the dose for 6 s.
 
-**In VR** (`VR/EnvironmentHUDVR.cs`, branch `vr-quest`): a headset doesn't draw the desktop's IMGUI, so the same cards, banners and panel are rebuilt on the head-locked VR HUD sheet, in the same places (top centre; under the navigation panel). The cards have to stay above the centre of your view, so they're fitted in this order:
+**In VR** (`VR/EnvironmentHUDVR.cs`, branch `vr-quest`): a headset doesn't draw the desktop's Immediate Mode Graphical User Interface (IMGUI), so the same cards, banners and panel are rebuilt on the head-locked VR HUD sheet, in the same places (top centre; under the navigation panel). The cards have to stay above the centre of your view, so they're fitted in this order:
 1. **Title lines first.** Every alert and banner gets at least its title line.
 2. **"+N more" always fits.** Anything that doesn't fit is counted in a "+N more" line, and the least important title lines make way for it.
 3. **The newest beep opens first.** Cards then open up in full: the alert that just beeped, then the most severe, the banners, the rest.
@@ -192,15 +192,15 @@ Event `duration_min` (EVA minutes) is converted to `duration_s` (real seconds) f
 ## Sources
 
 **Radiation**
-- NASA/JPL, *NASA Watches Mars Light Up During Epic Solar Storm* (June 2024). https://www.jpl.nasa.gov/news/nasa-watches-mars-light-up-during-epic-solar-storm
+- NASA/Jet Propulsion Laboratory (JPL), *NASA Watches Mars Light Up During Epic Solar Storm* (June 2024). https://www.jpl.nasa.gov/news/nasa-watches-mars-light-up-during-epic-solar-storm
 - Hassler et al., *A Solar Cycle of Radiation Measurements on the Surface of Mars* (WRMISS-27 slides). Source of the May 2024 peak of about 8,100 µGy/day. https://wrmiss.org/workshops/twentyseventh/Hassler.pdf
 - Löwe et al. 2025, *Nowcasting Solar Energetic Particle Events for Mars Missions* (preprint). Source of the 1.25× trigger, the 53-minute time to peak and the 30-minute rule. https://arxiv.org/abs/2502.02469
-- Zeitlin et al. 2018, GRL: the September 2017 SPE at Gale. https://elib.dlr.de/120101/1/ME-SBA-2018-Zeitlin_et_al-2018-Geophysical_Research_Letters.pdf
-- Semones (NASA SRAG), WRMISS-26: Orion HERA shelter criteria analysis. https://wrmiss.org/workshops/twentysixth/Semones.pdf
+- Zeitlin et al. 2018, Geophysical Research Letters (GRL): the September 2017 SPE at Gale. https://elib.dlr.de/120101/1/ME-SBA-2018-Zeitlin_et_al-2018-Geophysical_Research_Letters.pdf
+- Semones (NASA SRAG), WRMISS-26: Orion Hybrid Electronic Radiation Assessor (HERA) shelter criteria analysis. https://wrmiss.org/workshops/twentysixth/Semones.pdf
 - NASA SRAG model requirements: SPE definitions and EVA response. https://srag.jsc.nasa.gov/SRAGFiles/Publications/SRAG_Model_Requirements.pdf
 
 **UV and dust**
-- REMS RDR SIS: UV band definitions. https://atmos.nmsu.edu/PDS/data/mslrem_1001/DOCUMENT/REMS_RDR_SIS.TXT
+- REMS reduced data record (RDR) software interface specification (SIS): UV band definitions. https://atmos.nmsu.edu/PDS/data/mslrem_1001/DOCUMENT/REMS_RDR_SIS.TXT
 - Viúdez-Moreiras et al. 2025, PNAS: UV irradiance at Gale. https://pmc.ncbi.nlm.nih.gov/articles/PMC12130865/
 - Cockell et al. 2000, Icarus: the Martian UV environment. https://faculty.washington.edu/dcatling/papers_mine/Cockell_Catling2000.pdf
 - CIE erythemal action spectrum. https://woudc.org/archive/Documentation/www/action_spectra_e.html

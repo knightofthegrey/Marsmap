@@ -1,15 +1,15 @@
 # Marsmap
 
-**NASA Space Apps Challenge 2026 · Seattle · November 14–15, 2026**
+**NASA (National Aeronautics and Space Administration) Space Apps Challenge 2026 · Seattle · November 14–15, 2026**
 **Challenge:** [Interplanetary Survival Guide: Martian Map](https://www.spaceappschallenge.org/2026/challenges/interplanetary-survival-guide-martian-map/)
 
-A first-person **Marswalk** on real NASA terrain at Mount Sharp, Gale crater, with a helmet-style heads-up display:
+A first-person **Marswalk** on real NASA terrain at Mount Sharp, Gale crater, with a helmet-style heads-up display (HUD):
 - map layers;
 - a compass and navigation readout;
 - a route planner that steers around steep ground;
-- live radiation, UV and weather readings replayed from the Curiosity rover, with alerts when conditions turn dangerous.
+- live radiation, ultraviolet (UV) and weather readings replayed from the Curiosity rover, with alerts when conditions turn dangerous.
 
-It runs on a desktop and in VR on a **Meta Quest 3**. An **AR mode** shows the HUD and the map over your real room through the headset's passthrough cameras.
+It runs on a desktop and in virtual reality (VR) on a **Meta Quest 3**. An **augmented reality (AR) mode** shows the HUD and the map over your real room through the headset's passthrough cameras.
 
 > **Demo:** recorded from the **`vr-quest`** branch, in VR on a Meta Quest 3.
 > Video: *(add link)*
@@ -23,8 +23,8 @@ The VR and AR work is being merged into `main`. Until then:
 | Branch | What's on it |
 |---|---|
 | `main` | The desktop version: terrain, map layers, navigation, route planning, alerts, dust storm. Also the latest teammate tweaks: F8 green screen, 9 m waypoint arrival, the licence |
-| `vr-quest` | Everything on `main` as of the demo **plus the Meta Quest 3 version**: XR rig, controller input, the VR HUD, offline mode, Quest 3 build settings. **The demo was recorded from this branch** |
-| `vr-quest-ar` | `vr-quest` **plus AR mode** (passthrough): the real room instead of the Mars terrain, with the HUD and the EVA map on top |
+| `vr-quest` | Everything on `main` as of the demo **plus the Meta Quest 3 version**: extended reality (XR) rig, controller input, the VR HUD, offline mode, Quest 3 build settings. **The demo was recorded from this branch** |
+| `vr-quest-ar` | `vr-quest` **plus AR mode** (passthrough): the real room instead of the Mars terrain, with the HUD and the extravehicular activity (EVA) map on top |
 
 The [VR guide](docs/VR_QUEST.md) covers both the VR and AR builds.
 
@@ -33,9 +33,9 @@ The [VR guide](docs/VR_QUEST.md) covers both the VR and AR builds.
 ## What it does
 
 **Terrain and map layers**
-- **Where you start:** where Curiosity actually stood on **sol 4560** (4 June 2025). The ground is a 2 km patch of Mount Sharp built from a HiRISE terrain model, with the HiRISE colour photo draped over it.
-- **Layers:** switch between photo → slope hazards (caution 15–20°, no-go 20°+) → THEMIS thermal inertia (sand vs. rock) → height colours.
-- **Bigger area:** load the whole Gale crater region instead, as a seamless grid of terrain tiles (USGS MOLA-HRSC and CTX elevation, THEMIS and CTX imagery).
+- **Where you start:** where Curiosity actually stood on **sol 4560** (4 June 2025). The ground is a 2 km patch of Mount Sharp built from a High Resolution Imaging Science Experiment (HiRISE) terrain model, with the HiRISE colour photo draped over it.
+- **Layers:** switch between photo → slope hazards (caution 15–20°, no-go 20°+) → Thermal Emission Imaging System (THEMIS) thermal inertia (sand vs. rock) → height colours.
+- **Bigger area:** load the whole Gale crater region instead, as a seamless grid of terrain tiles. The elevation comes from the U.S. Geological Survey (USGS): a MOLA-HRSC (Mars Orbiter Laser Altimeter and High Resolution Stereo Camera) blend plus Context Camera (CTX) terrain models. The imagery comes from THEMIS and CTX.
 
 **Navigation and route planning**
 - **Compass:** arrows to the next waypoint (red) and Home Base (green), plus a readout of heading, pitch, latitude, longitude and elevation.
@@ -45,7 +45,7 @@ The [VR guide](docs/VR_QUEST.md) covers both the VR and AR builds.
   - **On the ground:** a beam marks the next waypoint and a sphere marks Home Base. On reaching a waypoint, the route quietly re-plans from where you stand.
 
 **Live conditions and alerts**
-- **Real readings:** radiation (RAD), temperature, pressure and UV (REMS) from sol 4560, replayed at 300× (a 4-hour EVA in 48 seconds).
+- **Real readings:** radiation from Curiosity's Radiation Assessment Detector (RAD), and temperature, pressure and UV from its Rover Environmental Monitoring Station (REMS), all from sol 4560, replayed at 300× (a 4-hour EVA in 48 seconds).
 - **Alerts with beeps:**
   - **dust storm early warning** from UV dimming and pressure dips;
   - **radiation**, using the RAD team's own solar-storm trigger and NASA's shelter level;
@@ -68,7 +68,7 @@ The [VR guide](docs/VR_QUEST.md) covers both the VR and AR builds.
 
 | | Source |
 |---|---|
-| Terrain, photo, slope, thermal, rover position | **Real** NASA / USGS data (HiRISE, THEMIS, MSL waypoints; CTX and MOLA-HRSC for the big map) |
+| Terrain, photo, slope, thermal, rover position | **Real** NASA / USGS data (HiRISE, THEMIS, Mars Science Laboratory (MSL) waypoints; CTX and MOLA-HRSC for the big map) |
 | Radiation, temperature, pressure, UV | **Real** Curiosity RAD + REMS readings from sol 4560, time-compressed |
 | Dust front and solar particle event | **Simulated**: scripted changes to the real readings, shaped on measured Mars events. The HUD labels them **SIMULATED** |
 | Alert thresholds | From published sources: [docs/ALERTS.md](docs/ALERTS.md) |
@@ -78,7 +78,7 @@ The [VR guide](docs/VR_QUEST.md) covers both the VR and AR builds.
 
 ## Quick start (desktop)
 
-You need **Unity 6000.6.9f1** (Unity 6.6), **Python 3.10+** and **Git LFS** (GitHub Desktop includes it).
+You need **Unity 6000.6.9f1** (Unity 6.6), **Python 3.10+** and **Git Large File Storage (LFS)** (GitHub Desktop includes it).
 
 ```bash
 # once, from the repo folder
@@ -102,10 +102,10 @@ The scripts relaunch themselves inside `.venv`, so plain `python3` works.
 
 ## Quick start (VR and AR, Meta Quest 3)
 
-Check out `vr-quest` (VR) or `vr-quest-ar` (VR + AR mode). Build the Android app and install it over USB with Unity's **Build And Run**.
+Check out `vr-quest` (VR) or `vr-quest-ar` (VR + AR mode). Build the Android app and install it over Universal Serial Bus (USB) with Unity's **Build And Run**.
 
 The full, tested setup is in **[docs/VR_QUEST.md](docs/VR_QUEST.md)**, including the steps that are easy to miss.
-- **AR mode** needs a few more settings: two packages, three OpenXR features and Android API 32.
+- **AR mode** needs a few more settings: two packages, three OpenXR (the open standard for VR and AR devices) features and Android API (application programming interface) level 32.
 - **Offline:** the terrain and the EVA replay are packed into the app, so the headset needs no laptop. Press **X** to start the EVA.
 - **Live from the laptop:** start the server with `--host 0.0.0.0` *before* opening the app, and put the laptop's Wi-Fi address in `Assets/Resources/marsmap_config.json`.
 
@@ -186,18 +186,21 @@ flowchart LR
 
 ## Data sources
 
-- **HiRISE terrain model** `DTEEC_019698_1750_019988_1750_U01` (MRO; USGS Astrogeology): [STAC catalogue](https://stac.astrogeology.usgs.gov/browser-dev/#/api/collections/mro_hirise_socet_dtms)
-- **HiRISE colour Gale mosaic** (MSL Gale merged orthophoto mosaic, USGS): [product page](https://astrogeology.usgs.gov/search/map/mars_msl_gale_merged_orthophoto_mosaic_25cm)
-- **THEMIS thermal inertia** (Mars Odyssey): [mosaic 30S120E](https://astrogeology.usgs.gov/search/map/themis_thermal_inertia_mosaic_quantitative_30s120e_100mpp)
-- **Curiosity position** (MSL waypoints, NASA/JPL MMGIS): [MSL_waypoints.json](https://mars.nasa.gov/mmgis-maps/MSL/Layers/json/MSL_waypoints.json)
-- **Curiosity RAD** radiation data: [NASA PDS PPI](https://pds-ppi.igpp.ucla.edu/data/MSL-M-RAD-3-RDR-V1.0/)
-- **Curiosity REMS** temperature, pressure and UV: [NASA PDS Atmospheres](https://atmos.nmsu.edu/PDS/data/mslrem_1001/)
-- **Big Gale map:**
-  - [MOLA-HRSC blended DEM, 200 m](https://asc-pds-services.s3.us-west-2.amazonaws.com/mosaic/Mars/HRSC_MOLA_Blend/Mars_HRSC_MOLA_BlendDEM_Global_200mp_v2.tif)
-  - USGS CTX DTMs and orthoimages (via the [USGS STAC API](https://stac.astrogeology.usgs.gov/api/search))
-  - THEMIS day IR
-- **Alert thresholds and event shapes:** published RAD, REMS, Perseverance MEDA and NASA SRAG studies, listed in [docs/ALERTS.md](docs/ALERTS.md#sources)
-- **[JMARS](https://jmars.asu.edu/)** (Arizona State University): scouting and CSV terrain exports
+Every map, reading and number in the app comes from these sources. The [project report](docs/PROJECT_REPORT.md#7-data-sources-where-every-piece-of-data-comes-from) has the full detail: exact files, value ranges and processing.
+
+| Data | What it is | How we use it | Link |
+|---|---|---|---|
+| **Curiosity's position** | NASA Jet Propulsion Laboratory (JPL) waypoint list for the Mars Science Laboratory (MSL) mission, Curiosity's mission: one entry per drive, with sol, latitude, longitude and elevation | Centres the 2 km site on where Curiosity stood on sol 4560 (−4.79985°, 137.38354° E), so the terrain and the weather replay are the same place and day | [MSL_waypoints.json](https://mars.nasa.gov/mmgis-maps/MSL/Layers/json/MSL_waypoints.json) |
+| **Terrain heights** | High Resolution Imaging Science Experiment (HiRISE) digital terrain model (DTM) `DTEEC_019698_1750_019988_1750_U01`. It's computed from a stereo pair of images taken by the HiRISE camera on the Mars Reconnaissance Orbiter (MRO): elevations in metres, about 1 m per pixel, published by the U.S. Geological Survey (USGS) | The shape of the ground (a 2 km box, 501 × 501 points 4 m apart) and the slope-hazard layer | [USGS SpatioTemporal Asset Catalog (STAC)](https://stac.astrogeology.usgs.gov/browser-dev/#/api/collections/mro_hirise_socet_dtms) · [file](https://astrogeo-ard.s3-us-west-2.amazonaws.com/mars/mro/hirise/controlled/dtm/ESP_019698_1750_ESP_019988_1750/DTEEC_019698_1750_019988_1750_U01.tif) |
+| **Colour photo** | The colour version (July 2025) of the MSL Gale Merged Orthophoto Mosaic, Curiosity's 25 cm/pixel base map. It's built from 78 HiRISE colour strips; the colour is enhanced, not true colour | The photo layer, draped over the terrain (2048 × 2048 pixels, about 1 m per pixel) | [product page](https://astrogeology.usgs.gov/search/map/mars_msl_gale_merged_orthophoto_mosaic_25cm) |
+| **Alignment reference** | The HiRISE orthoimage `ESP_019988_1750`, on the same grid as the terrain model | Measures the 49 m offset between the terrain model and the photo, so they line up | [file](https://astrogeo-ard.s3-us-west-2.amazonaws.com/mars/mro/hirise/controlled/dtm/ESP_019698_1750_ESP_019988_1750/ESP_019988_1750_RED_C_01_ORTHO.tif) |
+| **Thermal inertia** | Thermal Emission Imaging System (THEMIS) quantitative thermal-inertia mosaic, tile 30° S–0, 120–180° E, about 100 m per pixel, from the Mars Odyssey orbiter. Thermal inertia is how slowly ground heats and cools: low for loose sand and dust, high for rock | The thermal layer (sand vs. rock) | [product page](https://astrogeology.usgs.gov/search/map/themis_thermal_inertia_mosaic_quantitative_30s120e_100mpp) |
+| **Radiation** | Curiosity's Radiation Assessment Detector (RAD), sol 4560: the radiation dose rate at the surface, from the plastic detector "E", which responds most like human tissue | The replayed dose rate, the EVA dose and the radiation alerts. We use 15 real readings in the 09:00–13:00 window | [NASA Planetary Data System (PDS), Planetary Plasma Interactions (PPI) node](https://pds-ppi.igpp.ucla.edu/data/MSL-M-RAD-3-RDR-V1.0/) |
+| **Weather and UV** | Curiosity's Rover Environmental Monitoring Station (REMS), sol 4560: air temperature and pressure (`RMD` product), and six ultraviolet (UV) bands in W/m² (`RNV` product) | The replayed temperature, pressure and UV; the UV index and UV alerts; dust detection (UV dimming, pressure dips) | [NASA PDS Atmospheres node](https://atmos.nmsu.edu/PDS/data/mslrem_1001/) |
+| **Big map: elevation** | *Mars MGS MOLA - MEX HRSC Blended DEM Global 200m v2*: a whole-Mars digital elevation model (DEM) blending the Mars Orbiter Laser Altimeter (MOLA, on Mars Global Surveyor) with the High Resolution Stereo Camera (HRSC, on Mars Express). Plus USGS Context Camera (CTX) terrain models, about 20 m per pixel, tied to MOLA | The Gale crater map: the 200 m model everywhere, the 20 m models where they exist | [product page](https://astrogeology.usgs.gov/search/map/mars_mgs_mola_mex_hrsc_blended_dem_global_200m) · [CTX models](https://stac.astrogeology.usgs.gov/browser-dev/#/api/collections/mro_ctx_controlled_usgs_dtms) |
+| **Big map: imagery** | *THEMIS IR Day 100m Global Mosaic v12* (daytime infrared, Arizona State University), plus the CTX orthoimages (6 m) that come with the terrain models | The photo on the Gale crater tiles | [USGS planetary maps service](https://planetarymaps.usgs.gov/cgi-bin/mapserv?map=/maps/mars/mars_simp_cyl.map&SERVICE=WMS&REQUEST=GetCapabilities&VERSION=1.1.1) (layer `THEMIS`) |
+| **Alert thresholds and event shapes** | Published studies: Curiosity RAD and REMS, Perseverance's Mars Environmental Dynamics Analyzer (MEDA), and NASA's Space Radiation Analysis Group (SRAG) | The dust, radiation and UV alert levels; the shape of the simulated dust front and solar particle event | [docs/ALERTS.md](docs/ALERTS.md#sources) |
+| **JMARS** | Java Mission-planning and Analysis for Remote Sensing, Arizona State University's Mars mapping tool | Scouting the site, and CSV (comma-separated values) terrain exports the server can load | [jmars.asu.edu](https://jmars.asu.edu/) |
 
 ## The challenge, and how we answered it
 
@@ -222,7 +225,7 @@ The full checklist, with what's done and what isn't, is in [docs/PROJECT_REPORT.
 
 ## Use of AI
 
-We used generative AI as a development aid during the hackathon, and we want to be clear about where.
+We used generative artificial intelligence (AI) as a development aid during the hackathon, and we want to be clear about where.
 
 - **Code:** team members used AI coding assistants, including Anthropic's Claude through Claude Code. They helped write and debug parts of:
   - the Python data pipeline and WebSocket server;

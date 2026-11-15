@@ -1,6 +1,6 @@
 # Running Marsmap on a Meta Quest 3
 
-> **Branches:** the VR code is on **`vr-quest`**, and AR mode is on **`vr-quest-ar`** (`vr-quest` plus passthrough). Both are being merged into `main`; until then, check out one of them to build for the headset.
+> **Branches:** the virtual reality (VR) code is on **`vr-quest`**, and augmented reality (AR) mode is on **`vr-quest-ar`** (`vr-quest` plus passthrough). Both are being merged into `main`; until then, check out one of them to build for the headset.
 >
 > **Status:** done. The team recorded its demo from the `vr-quest` branch, in VR on a **Meta Quest 3**, built on a Mac. The steps below are the ones that worked, including the pitfalls we hit. On desktop (no headset) everything behaves as before; the scripts switch to VR by themselves when a headset is running.
 
@@ -20,7 +20,7 @@
 
 - **Camera:** the headset moves it; Cinemachine and mouse look switch off. (`VR/VRRig.cs`)
 - **Movement:** the left stick walks where you're looking (left grip to sprint, 2×), and the right stick snap-turns 30°. Jumping is off by default, for comfort. (`CharacterMover.cs`, `VR/VRRig.cs`)
-- **HUD:** IMGUI and Screen Space canvases aren't drawn inside a headset, so VR has its own versions on one head-locked **HUD sheet**. It sits 1.5 m in front of you, spans ±25° (16:9), and is laid out like the desktop screen (`VR/VRHud.cs`):
+- **Heads-up display (HUD):** Immediate Mode Graphical User Interface (IMGUI) and Screen Space canvases aren't drawn inside a headset, so VR has its own versions on one head-locked **HUD sheet**. It sits 1.5 m in front of you, spans ±25° (16:9), and is laid out like the desktop screen (`VR/VRHud.cs`):
 
   ```text
    compass              alert cards              navigation
@@ -35,12 +35,12 @@
   ```
 
   - **Compass and nav:** the compass, its arrows and the nav readout follow your head, not your body.
-  - **Alert cards** (dust, radiation, UV) work like desktop, with the same beeps (`VR/EnvironmentHUDVR.cs`):
+  - **Alert cards** (dust, radiation, ultraviolet (UV)) work like desktop, with the same beeps (`VR/EnvironmentHUDVR.cs`):
     - at most 3 alerts and 2 banners at once;
     - each gets at least its title line;
     - the alert that just beeped opens up first;
     - "+N more" counts any that don't fit;
-    - they clear when the EVA ends.
+    - they clear when the extravehicular activity (EVA) ends.
   - **Environment panel:** radiation, UV, dust, pressure and temperature, under the navigation panel.
   - **Minimap:** bottom-left with the "upcoming hills" profile to its right (`VR/MinimapVR.cs`). The layer label sits above it (`TerrainOverlay.cs`).
   - **Drawing order:** everything on the sheet draws on top of the world, so nearby ground never cuts through it. The dust storm has a VR screen tint (`DustStormEffect.cs`).
@@ -92,15 +92,15 @@ The trigger works like the mouse on desktop: **tap** to add a waypoint, **hold a
 **One time:**
 
 1. **Android module.**
-   - In Unity Hub: Installs → 6000.6.9f1 → ⋯ → **Add modules** → **Android Build Support**, with **OpenJDK** and **Android SDK & NDK Tools** ticked.
-   - **Restart Unity** afterwards. Until then, Build Profiles shows "No Android module loaded" and the Android, Meta Quest and Android XR platforms are greyed out.
+   - In Unity Hub: Installs → 6000.6.9f1 → ⋯ → **Add modules** → **Android Build Support**, with **OpenJDK** (an open-source Java Development Kit) and **Android SDK & NDK Tools** (the Android software and native development kits) ticked.
+   - **Restart Unity** afterwards. Until then, Build Profiles shows "No Android module loaded" and the Android, Meta Quest and Android XR (extended reality) platforms are greyed out.
 2. **Developer mode on the headset.**
    - In the Meta Horizon phone app: Devices → your Quest 3 → Headset settings → **Developer mode** on. This needs a free Meta developer account.
-   - Plug the headset into the Mac with USB-C, put it on, and accept **Allow USB debugging**.
+   - Plug the headset into the Mac with USB-C (Universal Serial Bus Type-C), put it on, and accept **Allow USB debugging**.
 
 **In Unity:** these settings are already committed on this branch. Check them if you start from a fresh copy or a different branch.
 
-3. **Packages:** **XR Plug-in Management** and **OpenXR**. They're in `Packages/manifest.json`; install them through the Package Manager if they're missing.
+3. **Packages:** **XR Plug-in Management** and **OpenXR (the open standard for VR and AR devices)**. They're in `Packages/manifest.json`; install them through the Package Manager if they're missing.
 4. **Turn OpenXR on for Android.** This is the step that's easy to miss.
    - Go to **Edit → Project Settings → XR Plug-in Management** (the top-level page, not the "OpenXR" page under it).
    - On the **Android tab** (robot icon), tick **OpenXR** under *Plug-in Providers*. Also tick **Initialize XR on Startup**.
@@ -111,17 +111,17 @@ The trigger works like the mouse on desktop: **tap** to add a waypoint, **hold a
 6. **Build Profiles** (File → Build Profiles):
    - Select **Android** (or **Meta Quest**), then click **Switch Platform**.
    - Set **Run Device** to your Quest 3; click Refresh if it isn't listed.
-   - Texture compression: **ASTC**.
+   - Texture compression: **Adaptive Scalable Texture Compression (ASTC)**.
 7. **Player Settings → Android → Other Settings:**
 
    | Section | Setting | Value |
    |---|---|---|
-   | Configuration | Scripting Backend | **IL2CPP** |
+   | Configuration | Scripting Backend | **IL2CPP** (Intermediate Language To C++) |
    | Configuration | Active Input Handling | Input System Package (New) |
    | Identification | Package Name | `com.marsmap.eva` |
-   | Identification | Minimum API Level | Android 10 (API 29); **Android 12L (API 32)** for [AR mode](#ar-mode-passthrough) |
+   | Identification | Minimum API Level (API: application programming interface) | Android 10 (API 29); **Android 12L (API 32)** for [AR mode](#ar-mode-passthrough) |
    | Identification | Target API Level | Automatic |
-   | Android Application Configuration (scroll down) | Target Architectures | **ARM64** only |
+   | Android Application Configuration (scroll down) | Target Architectures | **ARM64 (the 64-bit ARM processor architecture)** only |
    | Android Application Configuration | Internet Access | **Require** (needed for server mode) |
    | Rendering | Graphics APIs and Color Space | Defaults are fine (Vulkan first, Linear) |
 
@@ -137,7 +137,7 @@ The trigger works like the mouse on desktop: **tap** to add a waypoint, **hold a
 
 ### Offline (no laptop needed)
 
-The bundle in `Assets/StreamingAssets/Marsmap/` (about 5 MB) is packed into the app. It holds the HiRISE site (terrain plus the photo, slope and thermal layers) and the 48-second EVA replay.
+The bundle in `Assets/StreamingAssets/Marsmap/` (about 5 MB (megabytes)) is packed into the app. It holds the High Resolution Imaging Science Experiment (HiRISE) site (terrain plus the photo, slope and thermal layers) and the 48-second EVA replay.
 
 1. Open the app. With `"mode": "auto"` it waits 2.5 s for the server, then uses the bundle. `"mode": "offline"` skips the wait.
 2. Press **X** to start the EVA.
@@ -203,7 +203,7 @@ The Unity log says `[PassthroughView] 3D world hidden, HUD only: …` when it tu
 | The markers on the ground: the route line, the next waypoint's beam and ring, Home Base's beam and sphere, and their tags (`MapView`) | Alerts, beeps, the EVA replay and the server connection |
 
 - **Walking:** the left stick still walks you across the (invisible) Mars terrain, so the compass, minimap and readouts follow, but the room doesn't move. The hologram sits at table height above the floor under your feet.
-- **Camera:** while AR mode is on, the camera clears to transparent black (0,0,0,0) with HDR and post-processing off. The Quest only shows the room where the picture's alpha is below 1, and HDR (R11G11B10, no alpha) and post-processing both drop the alpha. Everything is put back when you switch off.
+- **Camera:** while AR mode is on, the camera clears to transparent black (0,0,0,0) with high dynamic range (HDR) and post-processing off. The Quest only shows the room where the picture's alpha is below 1, and HDR (R11G11B10, no alpha) and post-processing both drop the alpha. Everything is put back when you switch off.
 
 ### One-time setup (headset)
 
@@ -250,7 +250,7 @@ Read the log with `adb logcat -s Unity | grep -i -E "passthrough|ARFoundation|XR
 
 | Key | Default in code | Committed on this branch | Meaning |
 |---|---|---|---|
-| `server_url` | `ws://127.0.0.1:8765` | `ws://10.0.200.213:8765` | Server address; in a headset, the laptop's Wi-Fi IP |
+| `server_url` | `ws://127.0.0.1:8765` | `ws://10.0.200.213:8765` | Server address; in a headset, the laptop's Wi-Fi IP (Internet Protocol) address |
 | `mode` | `auto` | `auto` | `auto`: the server if it answers within `offline_after_s`, else the bundle (the fallback only happens in a headset). `server`: always the server. `offline`: always the bundle, on desktop too |
 | `offline_after_s` | 2.5 | 2.5 | Auto mode: seconds to wait for the server |
 | `offline_auto_start_s` | 0 | 0 | Offline: 0 = start the EVA with X / Enter; otherwise start automatically this many seconds after the terrain loads |
@@ -298,7 +298,7 @@ adb pull /sdcard/Oculus/Screenshots ~/Desktop/quest-screenshots
 | Random hills instead of Mount Sharp | No server and no bundle | Run `export_offline.py` and rebuild, or check `server_url` / Wi-Fi |
 | Alerts beep but nothing shows | An old build (before the VR HUD) | Rebuild from this branch: alerts and the environment panel now show in VR |
 | No alerts at all offline | The committed bundle predates the alerts | Run `python3 Python/export_offline.py`, rebuild |
-| Stutter | Quest GPU | Lower the URP render scale; turn off shadows and post-processing |
+| Stutter | Quest graphics processing unit (GPU) | Lower the Universal Render Pipeline (URP) render scale; turn off shadows and post-processing |
 
 ## Quest 1 (untested)
 

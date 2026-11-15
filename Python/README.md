@@ -13,22 +13,22 @@ raster_to_csv.py / prep_terrain.py --> extra map layers (CSV / files), not sent 
 
 | File | What it does |
 |---|---|
-| `fetch_sol.py` | Downloads one sol of real Curiosity RAD (radiation) + REMS (temperature, pressure, and the six UV bands) data from NASA PDS and writes `sol_samples.csv` + `sol_samples.meta.json` |
-| `feeder.py` | Replays `sol_samples.csv` and `events.json` onto the EVA clock (300×: a 4-hour EVA in 48 s), runs the alert detector, sends telemetry, alerts and events to the server. `--timeline` prints what it will send, without a server |
+| `fetch_sol.py` | Downloads one sol of real Curiosity data from NASA's (National Aeronautics and Space Administration) Planetary Data System, PDS: radiation from the Radiation Assessment Detector (RAD), and temperature, pressure and the six ultraviolet (UV) bands from the Rover Environmental Monitoring Station (REMS). Writes `sol_samples.csv` + `sol_samples.meta.json` |
+| `feeder.py` | Replays `sol_samples.csv` and `events.json` onto the extravehicular activity (EVA) clock (300×: a 4-hour EVA in 48 s), runs the alert detector, sends telemetry, alerts and events to the server. `--timeline` prints what it will send, without a server |
 | `alerts.py` | The environment alert system: scripted **scenarios** (a dust front, a solar particle event) that change the replayed readings, and an **AlertDetector** that sees only the telemetry and raises dust / radiation / UV alerts. Thresholds and sources: [docs/ALERTS.md](../docs/ALERTS.md) |
-| `server.py` | WebSocket server on port 8765, three jobs: (1) sends Unity the terrain when asked: Gale crater by default (`DEFAULT_POLYGON`, 12 seamless tiles), or `--site`, a `--polygon`, a JMARS CSV, or `--demo`; (2) relays everything the feeder sends to every Unity client, and late joiners get the last status + telemetry; (3) plans EVA routes for the map (`plan_route` -> `route`, with `route_planner.py`) |
+| `server.py` | WebSocket server on port 8765, three jobs: (1) sends Unity the terrain when asked: Gale crater by default (`DEFAULT_POLYGON`, 12 seamless tiles), or `--site`, a `--polygon`, a JMARS (Java Mission-planning and Analysis for Remote Sensing) CSV (comma-separated values) export, or `--demo`; (2) relays everything the feeder sends to every Unity client, and late joiners get the last status + telemetry; (3) plans EVA routes for the map (`plan_route` -> `route`, with `route_planner.py`) |
 | `route_planner.py` | A* route planning on the terrain Unity shows, with the team's rules from `Mars_mapping(3).ipynb`: hazard zones by tilt (0-10° optimal, 10-20 caution, 20-30 high risk, >30 impassable), no step over 18° and no ground over 25° side slope, Tobler EVA time, EASY / MODERATE / HARD |
-| `dem_builder.py` | Builds terrain for any polygon: MOLA-HRSC 200 m base with every USGS CTX DTM (20 m) that overlaps, levelled and feathered; THEMIS day IR + CTX imagery. Cached in `Python/imagery_cache/`. Used by `server.py`'s default Gale map and `--polygon` |
-| `export_offline.py` | *(branch `vr-quest`)* Writes the Quest app's offline bundle (`Assets/StreamingAssets/Marsmap/`): exactly the messages the server and feeder would send. HiRISE site by default; `--demo`, a CSV or `--polygon` too. Rebuild the app afterwards |
+| `dem_builder.py` | Builds terrain for any polygon: MOLA-HRSC (Mars Orbiter Laser Altimeter and High Resolution Stereo Camera) 200 m base with every overlapping 20 m terrain model from the U.S. Geological Survey (USGS) made from the Context Camera (CTX): a CTX DTM (digital terrain model), levelled and feathered; Thermal Emission Imaging System (THEMIS) day infrared (IR) + CTX imagery. Cached in `Python/imagery_cache/`. Used by `server.py`'s default Gale map and `--polygon` |
+| `export_offline.py` | *(branch `vr-quest`)* Writes the Quest app's offline bundle (`Assets/StreamingAssets/Marsmap/`): exactly the messages the server and feeder would send. High Resolution Imaging Science Experiment (HiRISE) site by default; `--demo`, a CSV or `--polygon` too. Rebuild the app afterwards |
 | `Mars_mapping.ipynb`, `Mars_mapping(3).ipynb` | The team's notebooks: route between spots and the "Martian Trail Recommender", the source of `route_planner.py`'s rules |
 | `make_site.py` | **Real terrain**: HiRISE terrain model + colour photo + slope + thermal inertia around Curiosity's sol-4560 position -> `site/` |
-| `site/` | Made by `make_site.py`: `terrain.csv`, `photo.jpg`, `slope.jpg`, `thermal.jpg`, `site.json` (about 13 MB) |
+| `site/` | Made by `make_site.py`: `terrain.csv`, `photo.jpg`, `slope.jpg`, `thermal.jpg`, `site.json` (about 13 megabytes, MB) |
 | `requirements.txt` | Server (`--site`, CSV, `--demo`), feeder, alerts, route planner, `fetch_sol.py` (numpy, websockets) |
 | `requirements-maps.txt` | Adds rasterio, pyproj, pillow: needed for the default Gale map / `--polygon` (`dem_builder.py`), `make_site.py`, `raster_to_csv.py`, `prep_terrain.py` |
-| `raster_to_csv.py` | Any map raster (GeoTIFF / ISIS cube, local or URL) -> CSV grid over a 2 km box: thermal inertia, elevation, or slope with ok / caution / no-go classes |
+| `raster_to_csv.py` | Any map raster (a GeoTIFF, a Tagged Image File Format image with map coordinates, or an ISIS cube, from the Integrated Software for Imagers and Spectrometers; a local file or a URL, uniform resource locator) -> CSV grid over a 2 km box: thermal inertia, elevation, or slope with ok / caution / no-go classes |
 | `prep_terrain.py` | HiRISE terrain model + photo -> Unity heightmap, photo, slope, route-cost grid, meta.json |
 | `sol_samples.csv` | **Real data**: sol 4560 (2025-06-03), 09:00-13:00 Mars local time. Regenerate with `fetch_sol.py` |
-| `sol_samples.meta.json` | Exactly which NASA files the CSV came from; the feeder reads its `source` for the HUD credit |
+| `sol_samples.meta.json` | Exactly which NASA files the CSV came from; the feeder reads its `source` for the heads-up display (HUD) credit |
 | `events.json` | Scripted demo events (Earth note, dust gust, nav degraded) and the two **scenarios** (`dust_front`, `solar_particle_event`) that `alerts.py` applies to the readings. Hand-written, shaped on measured Mars events |
 | `imagery_cache/` | `dem_builder.py`'s downloads (not in git). The repo root's `gale_terrain_tiles.zip` holds a pre-built copy: unzip it in the repo folder and the Gale map loads without downloading |
 
@@ -84,7 +84,7 @@ detector sees too few samples and skips levels.
 ## Real terrain + photo overlays (HiRISE)
 
 `make_site.py` builds a 2 km x 2 km site centred on **Curiosity's real position on sol 4560**
-(lat -4.79985, lon 137.38354 E, from NASA's MSL waypoint list), the same sol as the weather and
+(lat -4.79985, lon 137.38354 E, from NASA's Mars Science Laboratory (MSL) waypoint list), the same sol as the weather and
 radiation replay. It writes `Python/site/`:
 
 | File | What it is |
@@ -115,25 +115,25 @@ model, so the match is within ~1 m at the rover (box centre) but up to ~10 m off
 It also checks that every sample lands on its grid point and stops if one doesn't.
 
 Sources (credits are in `site.json` too):
-- Rover position: [MSL waypoints](https://mars.nasa.gov/mmgis-maps/MSL/Layers/json/MSL_waypoints.json), NASA/JPL
-- Elevation: HiRISE terrain model DTEEC_019698_1750_019988_1750_U01, 1 m, NASA/JPL/University of Arizona, via [USGS STAC](https://stac.astrogeology.usgs.gov/api/collections/mro_hirise_socet_dtms) (if a site isn't covered, the script searches STAC for another model)
+- Rover position: [MSL waypoints](https://mars.nasa.gov/mmgis-maps/MSL/Layers/json/MSL_waypoints.json), NASA/Jet Propulsion Laboratory (JPL)
+- Elevation: HiRISE terrain model DTEEC_019698_1750_019988_1750_U01, 1 m, NASA/JPL/University of Arizona, via [USGS SpatioTemporal Asset Catalog (STAC)](https://stac.astrogeology.usgs.gov/api/collections/mro_hirise_socet_dtms) (if a site isn't covered, the script searches STAC for another model)
 - Photo: [USGS HiRISE colour mosaic of Gale](https://asc-pds-services.s3.us-west-2.amazonaws.com/mosaic/Mars/MSL/MSL_Gale_HiRISE-LRGB_78quads_sharp_cog.tif), 0.25 m
-- Thermal inertia: Mars Odyssey THEMIS 100 m mosaic, ASU / USGS (same tile as below)
+- Thermal inertia: Mars Odyssey THEMIS 100 m mosaic, Arizona State University (ASU) / USGS (same tile as below)
 - Slope limits: 15 / 20 deg, borrowed from Artemis lunar EVA planning, not a Mars-specific NASA limit
 
 ## Data sources
 
 | Data | From | Script | Used for |
 |---|---|---|---|
-| Radiation dose rate | Curiosity RAD, [PDS PPI node](https://pds-ppi.igpp.ucla.edu/data/MSL-M-RAD-3-RDR-V1.0/) | `fetch_sol.py` | HUD dose + accumulated dose |
-| Air temperature, pressure | Curiosity REMS `RMD` product, [PDS Atmospheres node](https://atmos.nmsu.edu/PDS/data/mslrem_1001/) | `fetch_sol.py` | HUD weather, dust detection (pressure dips) |
-| UV (bands A, B, C, ABC, D, E) | Curiosity REMS `RNV` product (same node; `RMD` marks midday UV as unknown) | `fetch_sol.py` | UV index, UV alerts, dust detection (UV dimming) |
+| Radiation dose rate | Curiosity RAD, [PDS Planetary Plasma Interactions (PPI) node](https://pds-ppi.igpp.ucla.edu/data/MSL-M-RAD-3-RDR-V1.0/) | `fetch_sol.py` | HUD dose + accumulated dose |
+| Air temperature, pressure | Curiosity REMS `RMD` product (MODRDR, the Models Reduced Data Record: the REMS team's best-estimate values), [PDS Atmospheres node](https://atmos.nmsu.edu/PDS/data/mslrem_1001/) | `fetch_sol.py` | HUD weather, dust detection (pressure dips) |
+| UV (bands A, B, C, ABC, D, E) | Curiosity REMS `RNV` product (ENVRDR, the Environmental Magnitudes Reduced Data Record: calibrated values), same node. Used because `RMD` marks midday UV as unknown | `fetch_sol.py` | UV index, UV alerts, dust detection (UV dimming) |
 | Thermal inertia (sand vs rock) | Mars Odyssey THEMIS, [USGS tile 30S120E](https://astrogeology.usgs.gov/search/map/themis_thermal_inertia_mosaic_quantitative_30s120e_100mpp) | `make_site.py`, `raster_to_csv.py` | Thermal layer, hazard layer |
-| Elevation, slope | MRO HiRISE terrain models, [USGS STAC](https://stac.astrogeology.usgs.gov/api/collections/mro_hirise_socet_dtms) | `make_site.py`, `raster_to_csv.py`, `prep_terrain.py` | Terrain, no-go areas, route |
+| Elevation, slope | Mars Reconnaissance Orbiter (MRO) HiRISE terrain models, [USGS STAC](https://stac.astrogeology.usgs.gov/api/collections/mro_hirise_socet_dtms) | `make_site.py`, `raster_to_csv.py`, `prep_terrain.py` | Terrain, no-go areas, route |
 | Photo | MRO HiRISE colour mosaic of Gale (USGS) / HiRISE orthoimages | `make_site.py`, `prep_terrain.py` | Texture on the terrain |
 | Rover position | NASA MSL waypoints | `make_site.py` | Centre of the site |
-| Elevation, big map | [MOLA-HRSC blend, 200 m](https://asc-pds-services.s3.us-west-2.amazonaws.com/mosaic/Mars/HRSC_MOLA_Blend/Mars_HRSC_MOLA_BlendDEM_Global_200mp_v2.tif) + USGS CTX DTMs, 20 m ([STAC](https://stac.astrogeology.usgs.gov/api/search)) | `dem_builder.py` | Gale crater tiles, `--polygon` |
-| Imagery, big map | THEMIS day IR (100 m) + CTX orthoimages (6 m) | `dem_builder.py` | Photo on the tiles |
+| Elevation, big map | [MOLA-HRSC blended digital elevation model (DEM), 200 m](https://astrogeology.usgs.gov/search/map/mars_mgs_mola_mex_hrsc_blended_dem_global_200m) ([file](https://asc-pds-services.s3.us-west-2.amazonaws.com/mosaic/Mars/HRSC_MOLA_Blend/Mars_HRSC_MOLA_BlendDEM_Global_200mp_v2.tif)) + USGS CTX DTMs, about 20 m, made with NASA's Ames Stereo Pipeline and tied to MOLA ([STAC](https://stac.astrogeology.usgs.gov/browser-dev/#/api/collections/mro_ctx_controlled_usgs_dtms)) | `dem_builder.py` | Gale crater tiles, `--polygon` |
+| Imagery, big map | THEMIS IR Day 100m Global Mosaic v12 (Arizona State University) from the [USGS planetary maps service](https://planetarymaps.usgs.gov/cgi-bin/mapserv?map=/maps/mars/mars_simp_cyl.map&SERVICE=WMS&REQUEST=GetCapabilities&VERSION=1.1.1) (layer `THEMIS`), + CTX orthoimages (6 m) | `dem_builder.py` | Photo on the tiles |
 
 **No wind.** Curiosity's REMS wind sensor has returned no data for years, so wind is not in the CSV,
 the telemetry, or Unity's `TelemetryMessage`. Don't show a wind reading on the HUD.

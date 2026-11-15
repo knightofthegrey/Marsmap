@@ -2,9 +2,9 @@
 
 > **Final report.** This describes the finished project as it was demoed. The [Changelog](#13-changelog) at the bottom shows how it got here.
 >
-> **State described:** the whole project. The demo was recorded in VR on a Meta Quest 3 from branch **`vr-quest`**.
-> **Branches:** `main` has the desktop version plus the latest teammate tweaks (F8 green screen, 9 m waypoint arrival, the licence). The VR code (`vr-quest`) and AR mode (`vr-quest-ar`) are being merged into `main`. Things that are only on those branches so far are marked *(vr-quest)* or *(vr-quest-ar)*.
-> **Event:** NASA Space Apps Challenge 2026, Seattle. Challenge: [Interplanetary Survival Guide: Martian Map](https://www.spaceappschallenge.org/2026/challenges/interplanetary-survival-guide-martian-map/).
+> **State described:** the whole project. The demo was recorded in virtual reality (VR) on a Meta Quest 3 from branch **`vr-quest`**.
+> **Branches:** `main` has the desktop version plus the latest teammate tweaks (F8 green screen, 9 m waypoint arrival, the licence). The VR code (`vr-quest`) and augmented reality (AR) mode (`vr-quest-ar`) are being merged into `main`. Things that are only on those branches so far are marked *(vr-quest)* or *(vr-quest-ar)*.
+> **Event:** National Aeronautics and Space Administration (NASA) Space Apps Challenge 2026, Seattle. Challenge: [Interplanetary Survival Guide: Martian Map](https://www.spaceappschallenge.org/2026/challenges/interplanetary-survival-guide-martian-map/).
 > **Fact-checked** on 14 Nov 2026 against the code, the scene file, git and every linked source; **updated** on 15 Nov 2026 for the final state (environment alerts, the teammates' map, route and minimap features, VR).
 
 ## Contents
@@ -28,23 +28,23 @@
 
 ## 1. What the project is
 
-A first-person Unity demo of a **Marswalk**: an astronaut walking a 2 km × 2 km patch of **Mount Sharp in Gale Crater**, at the exact spot where NASA's Curiosity rover stood on **sol 4560 (4 June 2025)**. NASA dates a sol by the day most of it falls on. Sol 4560 began at about 22:30 UTC on 3 June, which is the date our data files currently store; see [§12](#12-known-limitations-and-open-issues).
+A first-person Unity demo of a **Marswalk**: an astronaut walking a 2 km × 2 km patch of **Mount Sharp in Gale Crater**, at the exact spot where NASA's Curiosity rover stood on **sol 4560 (4 June 2025)**. NASA dates a sol by the day most of it falls on. Sol 4560 began at about 22:30 Coordinated Universal Time (UTC) on 3 June, which is the date our data files currently store; see [§12](#12-known-limitations-and-open-issues).
 
-- **The ground** is built from a real NASA HiRISE terrain model, with the real HiRISE colour photo draped over it.
-- **Two data overlays** can be switched on: a slope-hazard map and a THEMIS thermal map.
-- **A bigger map:** the whole Gale crater region can be loaded instead, as a seamless grid of terrain tiles built from USGS MOLA-HRSC and CTX elevation with THEMIS and CTX imagery (`dem_builder.py`).
+- **The ground** is built from a real NASA High Resolution Imaging Science Experiment (HiRISE) terrain model, with the real HiRISE colour photo draped over it.
+- **Two data overlays** can be switched on: a slope-hazard map and a Thermal Emission Imaging System (THEMIS) thermal map.
+- **A bigger map:** the whole Gale crater region can be loaded instead, as a seamless grid of terrain tiles built from U.S. Geological Survey (USGS) MOLA-HRSC (Mars Orbiter Laser Altimeter and High Resolution Stereo Camera) and Context Camera (CTX) elevation with THEMIS and CTX imagery (`dem_builder.py`).
 - **Navigation:**
   - a compass with arrows to the next waypoint and to Home Base;
   - a readout of heading, pitch, latitude, longitude and elevation;
   - a heading-up minimap coloured by slope hazard zones, with an "upcoming hills" profile.
-- **Route planning:** an EVA map hologram (M) where you drop waypoints. An A* planner (`route_planner.py`, from the team's notebooks) routes around steep ground and rates the route EASY / MODERATE / HARD with an EVA time.
+- **Route planning:** an extravehicular activity (EVA) map hologram (M) where you drop waypoints. An A* planner (`route_planner.py`, from the team's notebooks) routes around steep ground and rates the route EASY / MODERATE / HARD with an EVA time.
 - **Live conditions:**
   - Radiation and weather readings that Curiosity actually measured on that same sol are replayed in fast-forward.
   - Scripted mission events (an Earth message, a dust gust, a navigation failure) are played alongside.
   - Two **simulated hazards**, a dust front and a solar particle event, change the replayed readings the way real events would.
-  - An **alert system** watches the readings and warns the astronaut: early warning for dust storms, and alerts when radiation and UV reach dangerous levels. Readings, alerts and events are shown on screen. See [ALERTS.md](ALERTS.md).
+  - An **alert system** watches the readings and warns the astronaut: early warning for dust storms, and alerts when radiation and ultraviolet (UV) reach dangerous levels. Readings, alerts and events are shown on screen. See [ALERTS.md](ALERTS.md).
 
-Python prepares the NASA data and serves it over a local WebSocket. Unity builds the world from what it receives. The same scene runs on a desktop and, on branch `vr-quest`, in VR on a **Meta Quest 3**, which is how the demo was recorded ([§14](#14-vr-meta-quest-3)). On branch `vr-quest-ar`, an **AR mode** shows the HUD and the EVA map over the real room through the Quest 3's passthrough ([§14.1](#141-ar-mode-passthrough)).
+Python prepares the NASA data and serves it over a local WebSocket. Unity builds the world from what it receives. The same scene runs on a desktop and, on branch `vr-quest`, in VR on a **Meta Quest 3**, which is how the demo was recorded ([§14](#14-vr-meta-quest-3)). On branch `vr-quest-ar`, an **AR mode** shows the heads-up display (HUD) and the EVA map over the real room through the Quest 3's passthrough ([§14.1](#141-ar-mode-passthrough)).
 
 ---
 
@@ -55,18 +55,18 @@ Python prepares the NASA data and serves it over a local WebSocket. Unity builds
 | Game engine | Unity | 6000.6.9f1 (Unity 6.6) | The 3D world, player, camera, effects |
 | Rendering | Universal Render Pipeline (URP) | 17.6.0 | Terrain shader (`Terrain/Lit`), fog, skybox |
 | Input | Unity Input System | 1.20.1 (the project uses the new Input System only) | Keyboard and mouse; Quest controllers through OpenXR |
-| XR | XR Plug-in Management, OpenXR | 4.7.0, 1.18.0 | Meta Quest 3 build (Android, IL2CPP, ARM64, Meta Quest Support feature) |
+| Extended reality (XR) | XR Plug-in Management, OpenXR (the open standard for VR and AR devices) | 4.7.0, 1.18.0 | Meta Quest 3 build: Android, IL2CPP (Intermediate Language To C++, Unity's ahead-of-time compiler), ARM64 (the 64-bit ARM processor architecture), Meta Quest Support feature |
 | Camera | Cinemachine | 6.6.0 | First-person pan/tilt camera locked to the player |
 | Networking (Unity) | NativeWebSocket | 2.0.8 (`github.com/endel/NativeWebSocket#upm-2`) | WebSocket client in Unity |
-| UI | uGUI + TextMeshPro | 2.6.0 | Compass and nav panel (scene Canvas); IMGUI for the desktop labels, alerts, minimap and route panel; world-space uGUI for the VR HUD |
+| UI | uGUI (Unity's built-in user interface system) + TextMeshPro | 2.6.0 | Compass and nav panel (scene Canvas); Immediate Mode Graphical User Interface (IMGUI) for the desktop labels, alerts, minimap and route panel; world-space uGUI for the VR HUD |
 | Language (Unity) | C# | Unity's C# 9 | All Unity scripts |
 | Language (data) | Python | 3.14 in `.venv` (3.10+ supported) | Data download, processing, server, replay |
 | WebSocket server | `websockets` | 17.4 (requires ≥ 14) | `server.py`, `feeder.py` |
 | Numerics | NumPy | 2.5.4 (requires ≥ 1.26) | Grids, resampling, slope |
-| Geospatial | rasterio (GDAL), pyproj | 1.5.2, 3.8.0 | Reading GeoTIFF/ISIS map files over HTTPS, map projections |
-| Images | Pillow | 13.0.0 | Writing the JPEG overlays |
-| Version control | Git + Git LFS | LFS 3.8.1 | JPEG images are stored through LFS |
-| Mapping tool (team) | JMARS (Arizona State University) | n/a | Scouting; manual CSV terrain exports |
+| Geospatial | rasterio (built on GDAL, the Geospatial Data Abstraction Library), pyproj | 1.5.2, 3.8.0 | Reading GeoTIFF (Tagged Image File Format images with map coordinates) and ISIS (Integrated Software for Imagers and Spectrometers) map files over HTTPS (Hypertext Transfer Protocol Secure); map projections |
+| Images | Pillow | 13.0.0 | Writing the Joint Photographic Experts Group (JPEG) overlays |
+| Version control | Git + Git Large File Storage (LFS) | LFS 3.8.1 | JPEG images are stored through LFS |
+| Mapping tool (team) | JMARS (Java Mission-planning and Analysis for Remote Sensing), Arizona State University | n/a | Scouting; manual comma-separated values (CSV) terrain exports |
 
 Python packages are split in two files:
 - **`requirements.txt`:** `numpy`, `websockets`. Enough for the server, feeder, `alerts.py` and `fetch_sol.py` (the last two use only the standard library; `fetch_sol.py` uses `certifi` when it's installed, for the macOS certificate problem).
@@ -253,7 +253,7 @@ In words:
 
 **Other flows:**
 - **The big Gale map** (`server.py` with no arguments, or `--polygon`).
-  - **Building it:** `dem_builder.py` assembles the terrain. The base is the 200 m MOLA-HRSC DEM, with every overlapping 20 m CTX DTM levelled onto it; the imagery is THEMIS day IR with CTX on top.
+  - **Building it:** `dem_builder.py` assembles the terrain. The base is the 200 m MOLA-HRSC digital elevation model (DEM), with every overlapping 20 m CTX digital terrain model (DTM) levelled onto it; the imagery is THEMIS day infrared (IR) with CTX on top.
   - **Splitting it:** an area too big for one Unity terrain is split into tiles of up to 2,049 × 2,049 points (about 41 km each). Each tile arrives as a `TILE` message (heights) and a `TIMG` message (image), and `Terraingen` joins them into one seamless terrain.
   - **Caching:** results are cached in `Python/imagery_cache/`.
 - **Route planning** (press M).
@@ -341,7 +341,7 @@ Marsmap/
 
 | Script | Written by | What it does | Key details |
 |---|---|---|---|
-| `PythonConnection.cs` | Merged, ours + teammate | WebSocket link to `server.py` | Reconnects every 2 s. Routes `HMAP` to `Terraingen` and `TEXL` to `TerrainOverlay`; turns JSON into C# events (`TelemetryReceived`, `AlertReceived`, `EventReceived`, `EarthNoteReceived`, `StatusReceived`, `SiteReceived`). Logs events, alerts and status, not telemetry. Asks for terrain only while `Terraingen.WaitingForHeightmap`. Catches handler errors so one bad message can't stop the stream. |
+| `PythonConnection.cs` | Merged, ours + teammate | WebSocket link to `server.py` | Reconnects every 2 s. Routes `HMAP` to `Terraingen` and `TEXL` to `TerrainOverlay`; turns JavaScript Object Notation (JSON) into C# events (`TelemetryReceived`, `AlertReceived`, `EventReceived`, `EarthNoteReceived`, `StatusReceived`, `SiteReceived`). Logs events, alerts and status, not telemetry. Asks for terrain only while `Terraingen.WaitingForHeightmap`. Catches handler errors so one bad message can't stop the stream. |
 | `Terraingen.cs` | Teammate (small edits by us) | Builds `TerrainData` at runtime | Placeholder in `Awake`. Heightmap from Python, or Perlin fallback after 5 s. Colours by height (matte), recentres the terrain at the world origin, places the player, aims the Cinemachine camera. Default vertical exaggeration 5×; the HiRISE site sets 1×. |
 | `TerrainOverlay.cs` | Ours | Shows site images on the terrain | One `TerrainLayer` the size of the terrain (`tileSize` = terrain size), so the image covers it exactly once. **L** cycles photo → slope → thermal → height colours. IMGUI label bottom-left. |
 | `CharacterMover.cs` | Teammate (edits by us) | Player movement | Adds default WASD/arrow and Space bindings if none are set in the Inspector. Walking 5 m/s, Shift = 3× sprint. Gravity −3.72 m/s² (Mars) is set on the Player in the scene; the script's own default is −7.42, so a newly added `CharacterMover` needs it set again. Movement direction follows the Cinemachine pan angle. Slopes don't slow or block movement. |
@@ -360,8 +360,8 @@ Marsmap/
 
 | Script | When you run it | Input | Output |
 |---|---|---|---|
-| `make_site.py` | Once per site (~20 s) | NASA rover waypoints; USGS STAC catalogue; HiRISE terrain model, orthoimage and colour mosaic, and THEMIS mosaic, all read remotely, box only | `Python/site/` (CSV + 3 JPEGs + `site.json`) |
-| `fetch_sol.py` | Once per sol (~1 min) | RAD and REMS files (RMD for temperature and pressure, RNV for UV) for one sol from the NASA Planetary Data System (PDS) | `sol_samples.csv` + `sol_samples.meta.json` |
+| `make_site.py` | Once per site (~20 s) | NASA rover waypoints; USGS SpatioTemporal Asset Catalog (STAC) catalogue; HiRISE terrain model, orthoimage and colour mosaic, and THEMIS mosaic, all read remotely, box only | `Python/site/` (CSV + 3 JPEGs + `site.json`) |
+| `fetch_sol.py` | Once per sol (~1 min) | Radiation Assessment Detector (RAD) and Rover Environmental Monitoring Station (REMS) files (RMD for temperature and pressure, RNV for UV) for one sol from the NASA Planetary Data System (PDS) | `sol_samples.csv` + `sol_samples.meta.json` |
 | `server.py` | Every demo (terminal 1) | `site/` (`--site`), the big Gale map (no arguments, via `dem_builder.py`), a `--polygon`, a JMARS CSV, or `--demo` | WebSocket on port 8765; plans routes with `route_planner.py` |
 | `feeder.py` | Every demo (terminal 2, after Play) | `sol_samples.csv`, `events.json` | Live JSON messages, 48 s (telemetry, alerts, events). `--timeline` prints the alerts and events without a server |
 | `alerts.py` | Used by `feeder.py` | Telemetry as it's sent; the real sol as the "normal" curve | Changed readings (scenarios), detector estimates, `alert` messages |
@@ -467,9 +467,9 @@ Change times and scenario shapes in `Python/events.json` (`t_eva_min`, where 1 E
 
 | What you see / receive | Real? | Source |
 |---|---|---|
-| Starting point / map centre | ✅ Real | Curiosity's position on sol 4560 (NASA/JPL waypoints) |
+| Starting point / map centre | ✅ Real | Curiosity's position on sol 4560 (NASA/Jet Propulsion Laboratory (JPL) waypoints) |
 | Ground shape | ✅ Real | HiRISE terrain model `DTEEC_019698_1750_019988_1750_U01` |
-| Photo layer | ✅ Real (colour-enhanced) | HiRISE colour version of the MSL Gale orthophoto mosaic |
+| Photo layer | ✅ Real (colour-enhanced) | HiRISE colour version of the Mars Science Laboratory (MSL) Gale orthophoto mosaic |
 | Slope hazard layer | ✅ Computed from real heights | HiRISE terrain model; 15°/20° limits borrowed from Artemis lunar EVA planning |
 | Thermal layer | ✅ Real | Mars Odyssey THEMIS thermal inertia |
 | Big Gale map (tiles) | ✅ Real | USGS MOLA-HRSC 200 m DEM + CTX 20 m DTMs; THEMIS day IR + CTX imagery (`dem_builder.py`) |
@@ -490,12 +490,12 @@ Change times and scenario shapes in `Python/events.json` (`t_eva_min`, where 1 E
 
 #### Curiosity rover position: NASA/JPL MSL waypoints
 - **Link:** <https://mars.nasa.gov/mmgis-maps/MSL/Layers/json/MSL_waypoints.json>
-- **Background:** JPL's MMGIS mapping system publishes Curiosity's position after every drive. It's the data behind NASA's "Where is Curiosity?" map. The file is GeoJSON with one feature per waypoint (sol, latitude, longitude, elevation, drive distance).
+- **Background:** JPL's Multi-Mission Geographic Information System (MMGIS) mapping system publishes Curiosity's position after every drive. It's the data behind NASA's "Where is Curiosity?" map. The file is GeoJSON (JSON for geographic data) with one feature per waypoint: site and drive numbers, sol, latitude, longitude, elevation, and the rover's orientation (roll, pitch, yaw).
 - **Used:** sol 4560 → **latitude −4.79984723°, longitude 137.3835414° E**. `make_site.py` centres the 2 km box there, so you start where the rover was on the same sol as the replayed weather and radiation.
 
 #### Terrain heights: HiRISE digital terrain model (DTM)
 - **Link (file used):** <https://astrogeo-ard.s3-us-west-2.amazonaws.com/mars/mro/hirise/controlled/dtm/ESP_019698_1750_ESP_019988_1750/DTEEC_019698_1750_019988_1750_U01.tif>
-- **Catalogue:** USGS Astrogeology STAC catalogue of HiRISE terrain models; `make_site.py` uses it to find the terrain model and its orthoimages. [Browser](https://stac.astrogeology.usgs.gov/browser-dev/#/api/collections/mro_hirise_socet_dtms) · [API](https://stac.astrogeology.usgs.gov/api/collections/mro_hirise_socet_dtms) · [docs](https://stac.astrogeology.usgs.gov/docs/data/mars/hirise_dtms/)
+- **Catalogue:** USGS Astrogeology STAC catalogue of HiRISE terrain models; `make_site.py` uses it to find the terrain model and its orthoimages. [Browser](https://stac.astrogeology.usgs.gov/browser-dev/#/api/collections/mro_hirise_socet_dtms) · [API (application programming interface)](https://stac.astrogeology.usgs.gov/api/collections/mro_hirise_socet_dtms) · [docs](https://stac.astrogeology.usgs.gov/docs/data/mars/hirise_dtms/)
 - **Background:**
   - **The camera:** HiRISE (High Resolution Imaging Science Experiment) is the camera on NASA's Mars Reconnaissance Orbiter, operated by the University of Arizona.
   - **How heights are measured:** terrain models are computed from **stereo pairs**, two images of the same ground taken from different angles. This one comes from images `ESP_019698_1750` and `ESP_019988_1750`.
@@ -507,7 +507,7 @@ Change times and scenario shapes in `Python/events.json` (`t_eva_min`, where 1 E
 - **Product page:** <https://astrogeology.usgs.gov/search/map/mars_msl_gale_merged_orthophoto_mosaic_25cm>
 - **Background:**
   - **What it is:** the colour version, added July 2025, of the *MSL Gale Merged Orthophoto Mosaic*. That mosaic is the 25 cm/pixel base map for the Curiosity mission's science and engineering operations, and the rover's positions are mapped in the same frame.
-  - **Who made it:** Timothy Parker and Fred J. Calef III. The originators are JPL-Caltech, NASA, USGS Astrogeology and the University of Arizona; USGS Astrogeology publishes it.
+  - **Who made it:** primary authors Fred J. Calef III and Timothy Parker. The originators are JPL-Caltech, NASA, the USGS Astrogeology Science Center and the University of Arizona; USGS Astrogeology publishes it (the grey-scale mosaic on 20 Oct 2016, the colour version in July 2025).
   - **How it was made:** HiRISE colour strips (78 quads) were georectified with manually placed tie-points and fused onto the mission's grey-scale HiRISE RED orthophoto mosaic. The result was lightly sharpened and saved as a JPEG-compressed Cloud-Optimized GeoTIFF.
   - **Colour:** the product page makes no natural-colour claim, so treat the colour as enhanced, not as what an eye would see.
   - **Coverage and download:** the colour file covers about 9 × 19 km of Curiosity's Mount Sharp traverse. The product page's main download is the older grey-scale version; the colour file is described in its "NEW (July 2025)" note.
@@ -527,13 +527,13 @@ Change times and scenario shapes in `Python/events.json` (`t_eva_min`, where 1 E
 - **Used:** about 20 × 20 THEMIS pixels cover the box, with values 320–450. They're colour-mapped from blue (340) to red (440) and blended 50% over the photo as `thermal.jpg`. The scale is relative to this box.
 
 #### Radiation: Curiosity RAD (Radiation Assessment Detector)
-- **Archive:** <https://pds-ppi.igpp.ucla.edu/data/MSL-M-RAD-3-RDR-V1.0/> (NASA Planetary Data System, Planetary Plasma Interactions node, UCLA)
+- **Archive:** <https://pds-ppi.igpp.ucla.edu/data/MSL-M-RAD-3-RDR-V1.0/> (NASA Planetary Data System, Planetary Plasma Interactions node, University of California, Los Angeles (UCLA))
 - **Files used, sol 4560:**
   - Label: <https://pds-ppi.igpp.ucla.edu/data/MSL-M-RAD-3-RDR-V1.0/DATA/SOL_04489_04612/RAD_RDR_2025_154_22_44_4560_V00.LBL>
   - Data: <https://pds-ppi.igpp.ucla.edu/data/MSL-M-RAD-3-RDR-V1.0/DATA/SOL_04489_04612/RAD_RDR_2025_154_22_44_4560_V00.TXT>
 - **Background:**
   - **The instrument:** RAD was built by Southwest Research Institute together with Christian-Albrechts-Universität zu Kiel (Germany). It measures the energetic-particle radiation reaching Mars's surface (galactic cosmic rays, solar particles, secondary neutrons). That's the radiation an astronaut would absorb.
-  - **The data:** each sol's calibrated data is one ~70 MB text file, split into observation periods of about 16 minutes. Each period is stored as a pair of blocks:
+  - **The data:** each sol's calibrated data is one ~70 MB (megabytes) text file, split into observation periods of about 16 minutes. Each period is stored as a pair of blocks:
     - the first holds the Mars local time and a **total dose rate** in µGy/h from two detectors, **B** (silicon) and **E** (plastic, closer to human tissue);
     - the second holds only a pulse-height table.
 - **Used:**
@@ -549,7 +549,10 @@ Change times and scenario shapes in `Python/events.json` (`t_eva_min`, where 1 E
 - **Background:**
   - **The instrument:** REMS, provided by Spain's Centro de Astrobiología, measures air and ground temperature, pressure, humidity and UV.
   - **Wind:** its wind sensor has returned no data for these sols.
-  - **Product:** the `RMD` product is the processed version: a comma-separated table of about 27,700 timestamped samples per sol, with columns described in a PDS4 XML label.
+  - **Products:** REMS data come in several processing levels, named by short codes in the file names (REMS Software Interface Specification, [REMS_RDR_SIS.TXT](https://atmos.nmsu.edu/PDS/data/mslrem_1001/DOCUMENT/REMS_RDR_SIS.TXT)):
+    - **`RNV`:** the ENVRDR, the *Environmental Magnitudes Reduced Data Record*. These are calibrated values in physical units.
+    - **`RMD`:** the MODRDR, the *Models Reduced Data Record*. These are the same values after the REMS team's corrections and models, as their best estimate.
+    - Each is a comma-separated table of about 27,700 timestamped samples per sol, with its columns described in a PDS4 Extensible Markup Language (XML) label.
 - **Used:**
   - **Temperature and pressure:** `AMBIENT_TEMP` (kelvin → °C) and `PRESSURE` (Pa) from `RMD`, by Mars local time, averaged into 10-minute bins. Over the EVA window (09:00–13:00 Mars local time): **−56 °C warming to −41 °C**, and **797 to 767 Pa**.
   - **UV:** the six UV sensor bands from `RNV` (the calibrated environmental product), in W/m², averaged the same way.
@@ -568,16 +571,22 @@ Change times and scenario shapes in `Python/events.json` (`t_eva_min`, where 1 E
 
 #### Alert thresholds (published sources)
 Every alert level is tied to a source in [ALERTS.md](ALERTS.md). The main ones:
-- **Radiation:** the RAD team's 1.25× background trigger for solar particle events; NASA SRAG's 150 µGy/h shelter level for Orion.
-- **UV:** the WHO UV index scale; Earth's record UV index of 43; Gale's measured midday UV.
+- **Radiation:** the RAD team's 1.25× background trigger for solar particle events; the 150 µGy/h shelter level for Orion from NASA's Space Radiation Analysis Group (SRAG).
+- **UV:** the World Health Organization (WHO) UV index scale; Earth's record UV index of 43; Gale's measured midday UV.
 - **Dust:** UV-based dust opacity criteria from Curiosity and Perseverance studies.
 
 #### Big Gale map: USGS MOLA-HRSC, CTX and THEMIS (`dem_builder.py`)
-- **Elevation base:** [Mars MOLA-HRSC blended DEM, 200 m/px](https://asc-pds-services.s3.us-west-2.amazonaws.com/mosaic/Mars/HRSC_MOLA_Blend/Mars_HRSC_MOLA_BlendDEM_Global_200mp_v2.tif) (USGS Astrogeology), whole planet.
-- **Elevation detail:** every USGS CTX DTM (20 m/px; collection `mro_ctx_controlled_usgs_dtms`) that overlaps the polygon, found through the [USGS STAC API](https://stac.astrogeology.usgs.gov/api/search).
+- **Elevation base:** *Mars MGS MOLA - MEX HRSC Blended DEM Global 200m v2* ([product page](https://astrogeology.usgs.gov/search/map/mars_mgs_mola_mex_hrsc_blended_dem_global_200m), [file used](https://asc-pds-services.s3.us-west-2.amazonaws.com/mosaic/Mars/HRSC_MOLA_Blend/Mars_HRSC_MOLA_BlendDEM_Global_200mp_v2.tif)).
+  - **What it is:** a whole-planet elevation model at 200 m per pixel, from USGS Astrogeology (originators German Aerospace Center (DLR), NASA and Goddard Space Flight Center).
+  - **How it was made:** it blends laser altimetry from Mars Global Surveyor's MOLA instrument with stereo elevation from Mars Express's HRSC camera.
+- **Elevation detail:** USGS's MRO CTX DTMs (about 20 m/px; STAC collection `mro_ctx_controlled_usgs_dtms`, [browse](https://stac.astrogeology.usgs.gov/browser-dev/#/api/collections/mro_ctx_controlled_usgs_dtms)).
+  - **What they are:** terrain models made with NASA's Ames Stereo Pipeline from stereo pairs of the Context Camera on the Mars Reconnaissance Orbiter, then tied to MOLA.
+  - **Which ones:** every one that overlaps the polygon, found through the [USGS STAC API](https://stac.astrogeology.usgs.gov/api/search).
   - Each DTM is levelled onto the base (offset + tilt), noisy ones are skipped, and the edges are feathered.
   - At most 60 DTMs are used per polygon.
-- **Imagery:** THEMIS day IR (100 m/px) as the base, with the CTX orthoimages (6 m/px) that belong to the DTMs on top, brightness-matched.
+- **Imagery:**
+  - **Base:** *THEMIS IR Day 100m Global Mosaic v12*, made by Arizona State University and released in Aug 2014. It's semi-controlled, so it may not line up perfectly with MOLA. Fetched from the [USGS planetary maps service](https://planetarymaps.usgs.gov/cgi-bin/mapserv?map=/maps/mars/mars_simp_cyl.map&SERVICE=WMS&REQUEST=GetCapabilities&VERSION=1.1.1) (a Web Map Service, or WMS; layer `THEMIS`).
+  - **On top:** the CTX orthoimages (6 m/px) that belong to the DTMs, brightness-matched to the base.
 - **How it's read:** all of it is Cloud-Optimized GeoTIFF read remotely with rasterio, cached in `Python/imagery_cache/`.
 - **Used:** the default `server.py` area is Gale crater (`DEFAULT_POLYGON`, about 3.8–6.9° S, 135.4–139.7° E), split into terrain tiles.
 
@@ -664,7 +673,7 @@ All messages go through one WebSocket server on port 8765. Unity connects to `ws
 | `HMAP` | server → Unity | Binary | `"HMAP"`, int32 resolution N, float32 min elevation, max elevation, size X (m), size Z (m), then N×N uint16 (row 0 = south, column 0 = west) |
 | `TEXL` | server → Unity | Binary | `"TEXL"`, int32 name length L, L bytes name (`photo` / `slope` / `thermal`), then the JPEG file bytes |
 | `TILE` | server → Unity | Binary | Big map, one per tile: `"TILE"`, int32 ix, iz (column from west, row from south), nx, nz, count, res; float32 min / max elevation (the same for every tile, so edges match), tile size X, Z (m); then res×res uint16 heights |
-| `TIMG` | server → Unity | Binary | Right after its tile: `"TIMG"`, int32 ix, iz, then a PNG covering exactly that tile, north up |
+| `TIMG` | server → Unity | Binary | Right after its tile: `"TIMG"`, int32 ix, iz, then a Portable Network Graphics (PNG) covering exactly that tile, north up |
 | `plan_route` | Unity → server | JSON | `id, x[], z[]` (waypoints in Unity world metres, first = the astronaut), `loop`, `return_to_start` |
 | `route` | server → Unity | JSON | `id, ok, error, x, z, elev, tier, legs[]` (each: `from_wp, to_wp, ok, distance_m, minutes, start_index, end_index`), `distance_m, minutes, gain_m, loss_m, max_climb_deg, max_descent_deg, max_side_deg, difficulty, score, zone_pct, hazards, spacing_m` |
 | `status` | feeder → Unity | JSON | `state: started` (with `speed`) / `finished` (with `dose_total_mGy`) |
@@ -797,7 +806,7 @@ Key: ✅ done · 🟡 partly done · ⬜ not started
 - **Warnings:** Unity 6 CS0618 "obsolete" warnings for `FindFirstObjectByType` in `Initialize.cs`. Harmless; `FindAnyObjectByType` removes them.
 
 **Repository / team**
-- **Branches:** `vr-quest` is the final, demoed state. `main` and `DataSetIntegration` hold earlier states (`DataSetIntegration` was merged into `main` as PR #3); they don't have the VR HUD rework or the Quest 3 build settings.
+- **Branches:** `vr-quest` is the final, demoed state. `main` and `DataSetIntegration` hold earlier states (`DataSetIntegration` was merged into `main` as pull request (PR) #3); they don't have the VR HUD rework or the Quest 3 build settings.
 - **No JMARS export committed.**
 - **Repo size:**
   - `Python/site/` adds 13 MB (8.5 MB CSV; the JPEGs are stored through Git LFS);
@@ -833,7 +842,7 @@ Key: ✅ done · 🟡 partly done · ⬜ not started
 | 15 Nov 2026 | `740b21e` (main) | Teammate: F8 green screen (`GreenScreen.cs`); waypoint arrival radius 25 → 9 m with a quiet re-plan from your feet on arrival; desktop environment panel removed |
 | 15 Nov 2026 | `f422640` (main) | MIT licence |
 | 15 Nov 2026 | `ea0ba3d` (vr-quest-ar) | AR mode: Quest 3 passthrough with the HUD and EVA map on top ([§14.1](#141-ar-mode-passthrough)) |
-| 15 Nov 2026 | (this commit, main) | Docs and a new README on `main`, covering desktop, VR and AR, with an AI use section |
+| 15 Nov 2026 | (this commit, main) | Docs and a new README on `main`, covering desktop, VR and AR, with an artificial intelligence (AI) use section |
 
 ---
 
@@ -870,7 +879,7 @@ The demo was recorded in VR on a **Meta Quest 3** from branch `vr-quest`, built 
 - **Hidden:** the terrain's drawing (its data and collider stay, so the minimap, the readouts and route planning still work), the Mars sky and fog, scene objects, and the map's ground markers (route line, beams, ring, Home Base sphere, ground tags).
 - **Stays:** the whole HUD sheet, the EVA map (hologram, panel, laser, pins), the dust storm's tint and streaks, alerts and the replay.
 - **How (`VR/PassthroughView.cs`):**
-  - **The camera** clears to transparent black (0,0,0,0) with HDR and post-processing off. The Quest's render settings would otherwise drop the transparency the passthrough needs.
+  - **The camera** clears to transparent black (0,0,0,0) with high dynamic range (HDR) and post-processing off. The Quest's render settings would otherwise drop the transparency the passthrough needs.
   - **Passthrough itself:** AR Foundation's **AR Session** and **AR Camera Manager** are added by name the first time AR mode turns on. The camera manager is then switched on and off with the mode. Because they're added by name, the project compiles without the packages, and AR mode then shows the HUD over black.
   - **Builds:** `Assets/link.xml` keeps both components in IL2CPP builds.
   - **The hologram's shader** blends alpha for the Quest's premultiplied compositing.
