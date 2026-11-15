@@ -156,6 +156,8 @@ public class EnvironmentHUD : MonoBehaviour
         }
         else if (status.state == "finished")
         {
+            active.Clear();      // the EVA is over: no alerts left on screen
+            banners.Clear();
             AddBanner("EVA COMPLETE", $"Radiation dose this EVA: {status.dose_total_mGy:0.000} mGy.", InfoColor);
         }
     }

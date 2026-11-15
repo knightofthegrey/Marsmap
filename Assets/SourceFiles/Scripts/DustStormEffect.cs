@@ -19,12 +19,12 @@ public class DustStormEffect : MonoBehaviour
 
     [Header("Look")]
     public Color dustColor = new Color(0.66f, 0.45f, 0.28f);
-    [Tooltip("Exponential-squared fog density at the peak. 0.012: ground ~70% visible at 50 m, mostly hidden past ~150 m. Higher = thicker.")]
-    public float peakFogDensity = 0.012f;
-    [Range(0f, 1f)] public float peakScreenTint = 0.22f;
+    [Tooltip("Exponential-squared fog density at the peak. 0.03: ground ~10% visible at 50 m, hidden past ~80 m. Higher = thicker.")]
+    public float peakFogDensity = 0.03f;
+    [Range(0f, 1f)] public float peakScreenTint = 0.42f;
     [Range(0f, 1f)] [Tooltip("Sun brightness at the peak, as a fraction of normal")]
-    public float sunAtPeak = 0.45f;
-    public float maxDustPerSecond = 900f;
+    public float sunAtPeak = 0.3f;
+    public float maxDustPerSecond = 2200f;
     public Vector3 windDirection = new Vector3(1f, 0f, 0.3f);
     public float windSpeed = 22f;
 
@@ -236,10 +236,10 @@ public class DustStormEffect : MonoBehaviour
         main.loop = true;
         main.startLifetime = new ParticleSystem.MinMaxCurve(0.8f, 1.6f);
         main.startSpeed = 0f;                               // motion comes from velocityOverLifetime
-        main.startSize = new ParticleSystem.MinMaxCurve(0.03f, 0.12f);
-        main.startColor = new Color(dustColor.r, dustColor.g, dustColor.b, 0.55f);
+        main.startSize = new ParticleSystem.MinMaxCurve(0.04f, 0.18f);
+        main.startColor = new Color(dustColor.r, dustColor.g, dustColor.b, 0.7f);
         main.simulationSpace = ParticleSystemSimulationSpace.World;
-        main.maxParticles = 4000;
+        main.maxParticles = 8000;
 
         var shape = dust.shape;
         shape.shapeType = ParticleSystemShapeType.Box;
