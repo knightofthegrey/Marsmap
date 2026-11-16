@@ -1,8 +1,8 @@
 # Running Marsmap on a Meta Quest 3
 
-> **Branches:** the virtual reality (VR) and augmented reality (AR) code is on **`main`** (merged from `vr-quest`), so build the headset app from `main`. `vr-quest` is the branch the demo was recorded from.
+> **Branch:** the virtual reality (VR) and augmented reality (AR) code is on **`main`**, so build the headset app from `main`. It was developed on a `vr-quest` branch, since merged into `main` and deleted.
 >
-> **Status:** done. The team recorded its demo from the `vr-quest` branch, in VR on a **Meta Quest 3**, built on a Mac. The steps below are the ones that worked, including the pitfalls we hit. On desktop (no headset) everything behaves as before; the scripts switch to VR by themselves when a headset is running.
+> **Status:** done. The team recorded its demo on a **Meta Quest 3**, built on a Mac. The steps below are the ones that worked, including the pitfalls we hit. On desktop (no headset) everything behaves as before; the scripts switch to VR by themselves when a headset is running.
 
 ## Contents
 

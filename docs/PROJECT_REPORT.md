@@ -2,8 +2,8 @@
 
 > **Final report.** This describes the finished project as it was demoed. The [Changelog](#13-changelog) at the bottom shows how it got here.
 >
-> **State described:** the whole project. The demo was recorded in virtual reality (VR) on a Meta Quest 3 from branch **`vr-quest`**.
-> **Branches:** `main` has everything: the desktop version, the VR version and the augmented reality (AR) mode with hand tracking (merged from `vr-quest`), plus the F8 green screen and the licence. `vr-quest` is the branch the demo was recorded from; the AR mode and hand tracking were added to it after the demo.
+> **State described:** the whole project, on `main`. The demo was recorded in virtual reality (VR) on a Meta Quest 3.
+> **Branches:** `main` has everything: the desktop version, the VR version and the augmented reality (AR) mode with hand tracking, plus the F8 green screen and the licence. The VR and AR work was built on a `vr-quest` branch, merged into `main` (`24ec541`) and then deleted; the repository is now kept for public demonstration.
 > **Event:** National Aeronautics and Space Administration (NASA) Space Apps Challenge 2026, Seattle. Challenge: [Interplanetary Survival Guide: Martian Map](https://www.spaceappschallenge.org/2026/challenges/interplanetary-survival-guide-martian-map/).
 > **Fact-checked** on 14 Nov 2026 against the code, the scene file, git and every linked source; **updated** on 15 Nov 2026 for the final state (environment alerts, the teammates' map, route and minimap features, VR).
 
@@ -767,7 +767,7 @@ Key: ✅ done · 🟡 partly done · ⬜ not started
 |---|---|
 | Data sources credited | ✅ `site.json`, `Python/README.md`, this report, on-screen layer credits |
 | Open-source licence (Space Apps requires one) | ✅ [MIT](../LICENSE) (`f422640`) |
-| Project demo for submission: a video of 30 s or less, or 7 slides or fewer, at a public link ([submission guide](https://www.spaceappschallenge.org/resources/project-submission-guide/); check the 2026 version) | ✅ Recorded on a Meta Quest 3 from branch `vr-quest`: [short demo, VR and AR](https://youtu.be/aZsskE2OMx4) · [full walkthrough in VR](https://youtu.be/CJRw5Pc4I6o) |
+| Project demo for submission: a video of 30 s or less, or 7 slides or fewer, at a public link ([submission guide](https://www.spaceappschallenge.org/resources/project-submission-guide/); check the 2026 version) | ✅ Recorded on a Meta Quest 3: [short demo, VR and AR](https://youtu.be/aZsskE2OMx4) · [full walkthrough in VR](https://youtu.be/CJRw5Pc4I6o) |
 | Live demo pacing for the local 2-minute pitch | ✅ Demo events fit in 48 s (default `feeder.py` speed) |
 
 ---
@@ -814,7 +814,7 @@ Key: ✅ done · 🟡 partly done · ⬜ not started
 - **Warnings:** Unity 6 CS0618 "obsolete" warnings for `FindFirstObjectByType` in `Initialize.cs`. Harmless; `FindAnyObjectByType` removes them.
 
 **Repository / team**
-- **Branches:** `main` has everything, including VR, AR and hand tracking (`vr-quest` merged in). `vr-quest` is the demoed branch plus the later AR work. `DataSetIntegration` holds an earlier state (it was merged into `main` as pull request (PR) #3).
+- **Branches:** only `main` remains. The working branches (`vr-quest`, `DataSetIntegration`, `websocket`, `fuckunity`, `FirstTest`) were all merged into `main` and deleted; `DataSetIntegration` was merged as pull request (PR) #3.
 - **No JMARS export committed.**
 - **Repo size:**
   - `Python/site/` adds 13 MB (8.5 MB CSV; the JPEGs are stored through Git LFS);
@@ -851,15 +851,17 @@ Key: ✅ done · 🟡 partly done · ⬜ not started
 | 15 Nov 2026 | `f422640` (main) | MIT licence |
 | 15 Nov 2026 | `668707d`, `c87ecea`, `14a0a6c` (main) | Docs and a new README on `main`, with an artificial intelligence (AI) use section; data sources re-verified; acronyms spelled out |
 | 15 Nov 2026 | `c47b10d` (vr-quest) | Teammate: AR mode through Meta passthrough (`ARView.cs`, `AR/`), hand tracking for the EVA map (`HandInput.cs`, `MapViewHands.cs`) ([§14.1](#141-ar-mode-and-hand-tracking)) |
-| 15 Nov 2026 | (this commit, main) | `vr-quest` merged into `main`: VR, AR and hand tracking now on `main` alongside the green screen; docs updated |
+| 15 Nov 2026 | `24ec541` (main) | `vr-quest` merged into `main`: VR, AR and hand tracking now on `main` alongside the green screen; docs updated |
+| 15 Nov 2026 | `c682229` (main) | Demo video links |
+| 15 Nov 2026 | (this commit, main) | `vr-quest` branch deleted (fully merged); docs say `main` is the only branch |
 
 ---
 
 ## 14. VR (Meta Quest 3)
 
-*(on `main`, merged from `vr-quest`)*
+*(on `main`, merged from the former `vr-quest` branch)*
 
-The demo was recorded in VR on a **Meta Quest 3** from branch `vr-quest`, built on a Mac as an Android app (Unity OpenXR). Full guide, including the setup steps that are easy to miss: [docs/VR_QUEST.md](VR_QUEST.md).
+The demo was recorded in VR on a **Meta Quest 3**, built on a Mac as an Android app (Unity OpenXR). Full guide, including the setup steps that are easy to miss: [docs/VR_QUEST.md](VR_QUEST.md).
 
 **How it works:**
 - **XR rig:** `VR/VRRig.cs` puts the camera on the headset, switches off Cinemachine and mouse look, does right-stick snap turn, and points the compass, arrows and nav readout at the head.

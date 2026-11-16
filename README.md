@@ -11,18 +11,15 @@ A first-person **Marswalk** on real NASA terrain at Mount Sharp, Gale crater, wi
 
 It runs on a desktop and in virtual reality (VR) on a **Meta Quest 3**. An **augmented reality (AR) mode** shows the HUD and the map over your real room through the headset's passthrough cameras, and the map also works with hand tracking.
 
-> **Demo videos** (recorded on a Meta Quest 3 from the **`vr-quest`** branch):
+> **Demo videos** (recorded on a Meta Quest 3):
 > - [Short demo: VR and AR](https://youtu.be/aZsskE2OMx4)
 > - [Full walkthrough in VR](https://youtu.be/CJRw5Pc4I6o)
 
 ---
 
-## Branches
+## Project status
 
-| Branch | What's on it |
-|---|---|
-| `main` | **Everything:** the desktop version, the Meta Quest 3 VR version, AR mode and hand tracking (merged from `vr-quest`), plus the F8 green screen and the licence |
-| `vr-quest` | The Quest 3 branch. **The demo was recorded from this branch**; the AR mode and hand tracking were added to it afterwards |
+The hackathon is over and this repository is kept as a **public demonstration**. Everything is on **`main`**: the desktop version, the Meta Quest 3 VR version, AR mode and hand tracking, the F8 green screen and the licence. The VR and AR work was built on a `vr-quest` branch, which has been merged into `main` and deleted.
 
 The [VR guide](docs/VR_QUEST.md) covers both the VR and AR builds.
 
