@@ -767,7 +767,7 @@ Key: ✅ done · 🟡 partly done · ⬜ not started
 |---|---|
 | Data sources credited | ✅ `site.json`, `Python/README.md`, this report, on-screen layer credits |
 | Open-source licence (Space Apps requires one) | ✅ [MIT](../LICENSE) (`f422640`) |
-| Project demo for submission: a video of 30 s or less, or 7 slides or fewer, at a public link ([submission guide](https://www.spaceappschallenge.org/resources/project-submission-guide/); check the 2026 version) | ✅ Recorded in VR on a Meta Quest 3 from branch `vr-quest`. *(Add the public link.)* |
+| Project demo for submission: a video of 30 s or less, or 7 slides or fewer, at a public link ([submission guide](https://www.spaceappschallenge.org/resources/project-submission-guide/); check the 2026 version) | ✅ Recorded on a Meta Quest 3 from branch `vr-quest`: [short demo, VR and AR](https://youtu.be/aZsskE2OMx4) · [full walkthrough in VR](https://youtu.be/CJRw5Pc4I6o) |
 | Live demo pacing for the local 2-minute pitch | ✅ Demo events fit in 48 s (default `feeder.py` speed) |
 
 ---

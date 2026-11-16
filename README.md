@@ -11,8 +11,9 @@ A first-person **Marswalk** on real NASA terrain at Mount Sharp, Gale crater, wi
 
 It runs on a desktop and in virtual reality (VR) on a **Meta Quest 3**. An **augmented reality (AR) mode** shows the HUD and the map over your real room through the headset's passthrough cameras, and the map also works with hand tracking.
 
-> **Demo:** recorded from the **`vr-quest`** branch, in VR on a Meta Quest 3.
-> Video: *(add link)*
+> **Demo videos** (recorded on a Meta Quest 3 from the **`vr-quest`** branch):
+> - [Short demo: VR and AR](https://youtu.be/aZsskE2OMx4)
+> - [Full walkthrough in VR](https://youtu.be/CJRw5Pc4I6o)
 
 ---
 
