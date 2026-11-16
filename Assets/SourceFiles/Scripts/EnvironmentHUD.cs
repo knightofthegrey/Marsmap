@@ -12,9 +12,12 @@ using UnityEngine;
 ///  - Banners under them for a few seconds: EVA events (dust gust, navigation degraded), notes
 ///    from Earth, alerts that cleared.
 ///
+/// A headset doesn't draw IMGUI (OnGUI): EnvironmentHUDVR.cs puts the same alerts and panel on
+/// the head-locked HUD sheet there.
+///
 /// Created automatically (like DustStormEffect); nothing to add to the scene.
 /// </summary>
-public class EnvironmentHUD : MonoBehaviour
+public partial class EnvironmentHUD : MonoBehaviour
 {
     [Header("Layout (screen pixels)")]
     public float alertWidth = 520f;
@@ -42,7 +45,7 @@ public class EnvironmentHUD : MonoBehaviour
     TelemetryMessage telemetry;
     bool subscribed;
 
-    MapView mapView; float nextSearch;
+    MapView mapView; GetState navPanel; float nextSearch;  // navPanel: the VR panel sits under it
     AudioSource audioSource; AudioClip beepAdvisory, beepWarning, beepDanger;
     Texture2D white;
     GUIStyle titleStyle, textStyle, tagStyle;
@@ -54,10 +57,15 @@ public class EnvironmentHUD : MonoBehaviour
         new GameObject(nameof(EnvironmentHUD)).AddComponent<EnvironmentHUD>();
     }
 
-    void OnDisable() => Unsubscribe();
+    void OnDisable()
+    {
+        Unsubscribe();
+        HideVR();
+    }
 
     void OnDestroy()
     {
+        DestroyVR();
         if (white != null) Destroy(white);
         if (beepAdvisory != null) Destroy(beepAdvisory);
         if (beepWarning != null) Destroy(beepWarning);
@@ -67,10 +75,11 @@ public class EnvironmentHUD : MonoBehaviour
     void Update()
     {
         if (!subscribed) TrySubscribe();
-        if (Time.unscaledTime >= nextSearch && mapView == null)
+        if (Time.unscaledTime >= nextSearch && (mapView == null || navPanel == null))
         {
-            nextSearch = Time.unscaledTime + 1f; // it appears once the terrain has loaded
-            mapView = FindAnyObjectByType<MapView>();
+            nextSearch = Time.unscaledTime + 1f; // these appear once the terrain has loaded
+            if (mapView == null) mapView = FindAnyObjectByType<MapView>();
+            if (navPanel == null) navPanel = FindAnyObjectByType<GetState>();
         }
     }
 
@@ -171,6 +180,7 @@ public class EnvironmentHUD : MonoBehaviour
     // ---------------------------------------------------------------
     void OnGUI()
     {
+        if (MarsmapInput.XRActive) return; // a headset doesn't draw IMGUI: EnvironmentHUDVR.cs has world-space versions
         if (active.Count == 0 && banners.Count == 0) return;
         EnsureStyles();
         GUI.depth = -10; // above the dust tint

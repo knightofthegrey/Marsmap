@@ -12,8 +12,9 @@ using UnityEngine.InputSystem;
 ///  - "upcoming hills": the elevation profile of the next stretch of your route (or, without a
 ///    route, of the ground straight ahead), with the climb, descent and steepest grade.
 /// Reads the terrain from Terraingen and the route from MapView. Adds itself at startup.
+/// In a headset it sits bottom-left on the VR HUD sheet, as on desktop (MinimapVR.cs, VR/).
 /// </summary>
-public class Minimap : MonoBehaviour
+public partial class Minimap : MonoBehaviour
 {
     [Tooltip("Metres from your position to the edge of the minimap (+ / - change it)")]
     public float radius = 600f;
@@ -84,6 +85,7 @@ public class Minimap : MonoBehaviour
         BottomLeftRect = Rect.zero;
         if (mapTex != null) Destroy(mapTex);
         if (profileTex != null) Destroy(profileTex);
+        DestroyVR();
     }
 
     void Update()
@@ -102,6 +104,7 @@ public class Minimap : MonoBehaviour
                 builtVersion = -1;
             }
         }
+        if (MarsmapInput.XRActive && !mapOpen) VRZoom();
         if (mapOpen || player == null || terraingen == null || !terraingen.TryGetMapBounds(out _)) return;
 
         Vector2 here = new Vector2(player.position.x, player.position.z);
@@ -320,7 +323,7 @@ public class Minimap : MonoBehaviour
         else
         {
             // No route: the ground straight ahead of you
-            Vector3 fwd = Vector3.ProjectOnPlane(player.forward, Vector3.up).normalized;
+            Vector3 fwd = Quaternion.Euler(0f, Heading(), 0f) * Vector3.forward;
             float step = Mathf.Max(10f, profileAhead / 100f);
             float prev = 0f;
             for (float d = 0f; d <= profileAhead; d += step)
@@ -382,6 +385,17 @@ public class Minimap : MonoBehaviour
         profileTex.Apply(false);
     }
 
+    // The way you face, as a compass heading: your head in a headset (the body only turns with
+    // snap turn there), the player otherwise
+    float Heading()
+    {
+        Camera cam = MarsmapInput.XRActive ? Camera.main : null;
+        Transform t = cam != null ? cam.transform : player;
+        Vector3 f = Vector3.ProjectOnPlane(t.forward, Vector3.up);
+        if (f.sqrMagnitude < 1e-6f) f = Vector3.ProjectOnPlane(t.up, Vector3.up); // looking straight down
+        return Mathf.Atan2(f.x, f.z) * Mathf.Rad2Deg;
+    }
+
     float Elevation(Vector3 world) =>
         terraingen.TryGetElevation(world, out float m) ? m : terraingen.GroundY(world);
 
@@ -391,7 +405,7 @@ public class Minimap : MonoBehaviour
     void OnGUI()
     {
         bool mapOpen = mapView != null && mapView.IsOpen;
-        if (mapTex == null || player == null || mapOpen)
+        if (mapTex == null || player == null || mapOpen || MarsmapInput.XRActive) // no IMGUI in a headset
         {
             BottomLeftHeight = 0f;
             BottomLeftRect = Rect.zero;
@@ -408,7 +422,7 @@ public class Minimap : MonoBehaviour
         float size = Mathf.Clamp(Screen.height * sizeOfScreen, 130f, 340f);
         var rect = new Rect(margin, Screen.height - margin - size, size, size);
         Vector2 centre = rect.center;
-        float heading = player.eulerAngles.y;
+        float heading = Heading();
         const float legendH = 18f;
         BottomLeftHeight = size + margin + 4f + legendH;
         BottomLeftRect = Rect.MinMaxRect(rect.xMin, rect.yMin - legendH - 2f, rect.xMax, rect.yMax);

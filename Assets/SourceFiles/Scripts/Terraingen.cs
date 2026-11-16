@@ -746,10 +746,10 @@ public class Terraingen : MonoBehaviour
 
     void Update()
     {
-        // L: satellite photo <-> elevation colours on the tiles (TerrainOverlay does this for
-        // a single terrain; it has no layers in tiled mode, so the two never both react)
-        Keyboard keyboard = Keyboard.current;
-        if (tiles != null && keyboard != null && keyboard.lKey.wasPressedThisFrame)
+        // L (or B on a Quest controller): satellite photo <-> elevation colours on the tiles
+        // (TerrainOverlay does this for a single terrain; it has no layers in tiled mode, so the
+        // two never both react)
+        if (tiles != null && MarsmapInput.NextLayer.WasPressedThisFrame())
         {
             showTilePhotos = !showTilePhotos;
             foreach (TileInfo info in tileInfos.Values) ShowTileLayers(info);

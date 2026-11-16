@@ -1,0 +1,25 @@
+{
+    "name": "Marsmap.AR.Meta",
+    "rootNamespace": "",
+    "references": [
+        "Marsmap.AR.Bridge",
+        "Oculus.VR"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [
+        "MARSMAP_META_XR"
+    ],
+    "versionDefines": [
+        {
+            "name": "com.meta.xr.sdk.core",
+            "expression": "",
+            "define": "MARSMAP_META_XR"
+        }
+    ],
+    "noEngineReferences": false
+}

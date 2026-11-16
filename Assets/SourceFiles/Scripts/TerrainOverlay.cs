@@ -1,11 +1,12 @@
 using System.Collections.Generic;
 using UnityEngine;
-using UnityEngine.InputSystem;
 
 /// <summary>
 /// Drapes the site images that Python/server.py sends (photo, slope, thermal) over the
-/// runtime terrain. Press L to cycle: each site layer in site.json order, then Terraingen's
-/// elevation colours, then back to the first layer.
+/// runtime terrain. Press L (or B on a Quest controller) to cycle: each site layer in
+/// site.json order, then Terraingen's elevation colours, then back to the first layer.
+/// The layer name and credit show bottom-left: an IMGUI label on desktop, a world-space
+/// label that follows the head in VR (IMGUI isn't drawn in a headset).
 ///
 /// Each image covers exactly the heightmap's box (top row = north, left column = west), so a
 /// single TerrainLayer as big as the whole terrain lines it up with the heights, no flipping:
@@ -41,6 +42,15 @@ public class TerrainOverlay : MonoBehaviour
 
     bool searchedTerraingen;
     GUIStyle titleStyle, creditStyle;
+
+    // VR only: a copy of the IMGUI label on the head-locked HUD sheet (VRHud.cs), made the first
+    // time it has something to show. Sizes in HUD sheet units (the sheet is 800 x 450).
+    const float VrLabelMargin = 10f;  // from the left / bottom edge, like the desktop margin
+    const float VrLabelGap = 8f;      // between the top of the minimap's legend and the label
+    const float VrLabelWidth = 250f;
+    VRHudLabel vrLabel;
+    string vrShownLabel, vrShownCredit; // what vrLabel was last given, so Set runs only on change
+    bool vrLabelVisible;
 
     /// <summary>True when site images exist for the terrain currently shown.</summary>
     public bool HasLayers => textures.Count > 0 && siteData != null && siteData == TrackTerrain();
@@ -119,8 +129,8 @@ public class TerrainOverlay : MonoBehaviour
 
     void Update()
     {
-        Keyboard keyboard = Keyboard.current;
-        if (keyboard != null && keyboard.lKey.wasPressedThisFrame && HasLayers) NextLayer();
+        if (MarsmapInput.NextLayer.WasPressedThisFrame() && HasLayers) NextLayer(); // L key or B button
+        UpdateVrLabel();
     }
 
     // ---------------------------------------------------------------
@@ -254,9 +264,60 @@ public class TerrainOverlay : MonoBehaviour
 
     bool SiteHasLayer(string layerName) => FindSiteLayer(layerName) != null;
 
+    // Name and credit of the layer shown (existing strings, nothing allocated).
+    void CurrentLabel(out string label, out string credit)
+    {
+        SiteLayer info = selected != null ? FindSiteLayer(selected) : null;
+        label = selected == null ? ElevationLabel
+              : info != null && !string.IsNullOrEmpty(info.label) ? info.label : selected;
+        credit = selected == null ? ElevationCredit : info?.credit;
+    }
+
+    // In VR the label is a panel on the HUD sheet, bottom-left just above the minimap (as on
+    // desktop); hidden without site layers and while the EVA map is open.
+    void UpdateVrLabel()
+    {
+        bool show = showLabel && MarsmapInput.XRActive && HasLayers && !MapView.AnyOpen;
+        if (!show)
+        {
+            if (vrLabel != null && vrLabelVisible)
+            {
+                vrLabel.SetVisible(false);
+                vrLabelVisible = false;
+            }
+            return;
+        }
+
+        if (vrLabel == null)
+        {
+            vrLabel = VRHud.CreateLabel("Layer label", Vector2.zero, new Vector2(VrLabelMargin, VrLabelMargin), VrLabelWidth);
+            if (vrLabel == null) return;
+            vrShownLabel = vrShownCredit = null;
+            vrLabelVisible = false;
+        }
+
+        // Grows up from its bottom-left corner: just above the minimap, or in the corner without one
+        float minimapTop = Minimap.VRStackHeight; // 0 while the VR minimap is hidden
+        vrLabel.SetPosition(new Vector2(VrLabelMargin, minimapTop > 0f ? minimapTop + VrLabelGap : VrLabelMargin));
+
+        CurrentLabel(out string label, out string credit);
+        credit = credit ?? "";
+        if (!ReferenceEquals(label, vrShownLabel) || !ReferenceEquals(credit, vrShownCredit))
+        {
+            vrLabel.Set(label + "  (B: next layer)", credit);
+            vrShownLabel = label;
+            vrShownCredit = credit;
+        }
+        if (!vrLabelVisible)
+        {
+            vrLabel.SetVisible(true);
+            vrLabelVisible = true;
+        }
+    }
+
     void OnGUI()
     {
-        if (!showLabel || !HasLayers) return;
+        if (!showLabel || !HasLayers || MarsmapInput.XRActive) return; // VR uses vrLabel instead
 
         if (titleStyle == null)
         {
@@ -266,10 +327,7 @@ public class TerrainOverlay : MonoBehaviour
             creditStyle.normal.textColor = new Color(0.85f, 0.85f, 0.85f);
         }
 
-        SiteLayer info = selected != null ? FindSiteLayer(selected) : null;
-        string label = selected == null ? ElevationLabel
-                     : info != null && !string.IsNullOrEmpty(info.label) ? info.label : selected;
-        string credit = selected == null ? ElevationCredit : info?.credit;
+        CurrentLabel(out string label, out string credit);
         var title = new GUIContent(label + "  (L: next layer)");
         var creditContent = new GUIContent(credit ?? "");
 
@@ -305,5 +363,7 @@ public class TerrainOverlay : MonoBehaviour
     {
         RestoreOriginal(); // leave the terrain with its elevation colours, not a destroyed texture
         ClearTextures();
+        if (vrLabel != null) Destroy(vrLabel.gameObject);
+        vrLabel = null;
     }
 }

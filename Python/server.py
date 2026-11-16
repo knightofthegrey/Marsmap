@@ -441,9 +441,33 @@ async def handler(ws):
         print(f"[-] {peer} disconnected")
 
 
+def lan_addresses():
+    """This machine's LAN IPv4 addresses (for a headset on the same Wi-Fi)."""
+    import socket
+    found = set()
+    try:  # the address used to reach the internet (no packet is actually sent)
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
+            s.connect(("8.8.8.8", 80))
+            found.add(s.getsockname()[0])
+    except OSError:
+        pass
+    try:
+        for info in socket.getaddrinfo(socket.gethostname(), None, socket.AF_INET):
+            found.add(info[4][0])
+    except OSError:
+        pass
+    return sorted(ip for ip in found if not ip.startswith("127."))
+
+
 async def main(host, port):
     async with serve(handler, host, port) as server:
         print(f"Server listening on ws://{host}:{port}")
+        ips = lan_addresses()
+        if ips:
+            urls = " or ".join(f"ws://{ip}:{port}" for ip in ips)
+            hint = "" if host in ("0.0.0.0", "::", "") else " (start the server with --host 0.0.0.0)"
+            print(f"Headset on the same Wi-Fi: set server_url in Assets/Resources/marsmap_config.json "
+                  f"to {urls}{hint}")
         await server.serve_forever()
 
 

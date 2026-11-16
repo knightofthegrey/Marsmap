@@ -7,7 +7,7 @@ fetch_sol.py --> sol_samples.csv --> feeder.py + alerts.py --ws--> server.py --w
           make_site.py --> site/ (terrain.csv + images) --------------+   +-- photo / slope / thermal --> TerrainOverlay
           dem_builder.py --> Gale crater tiles (imagery_cache/) ------+   +-- routes (route_planner.py) --> MapView
                          (or a JMARS export.csv)
-export_offline.py --> Assets/StreamingAssets/Marsmap/ (the same messages, packed into the Quest app; branch vr-quest)
+export_offline.py --> Assets/StreamingAssets/Marsmap/ (the same messages, packed into the Quest app)
 raster_to_csv.py / prep_terrain.py --> extra map layers (CSV / files), not sent over the socket
 ```
 
@@ -19,7 +19,7 @@ raster_to_csv.py / prep_terrain.py --> extra map layers (CSV / files), not sent 
 | `server.py` | WebSocket server on port 8765, three jobs: (1) sends Unity the terrain when asked: Gale crater by default (`DEFAULT_POLYGON`, 12 seamless tiles), or `--site`, a `--polygon`, a JMARS (Java Mission-planning and Analysis for Remote Sensing) CSV (comma-separated values) export, or `--demo`; (2) relays everything the feeder sends to every Unity client, and late joiners get the last status + telemetry; (3) plans EVA routes for the map (`plan_route` -> `route`, with `route_planner.py`) |
 | `route_planner.py` | A* route planning on the terrain Unity shows, with the team's rules from `Mars_mapping(3).ipynb`: hazard zones by tilt (0-10° optimal, 10-20 caution, 20-30 high risk, >30 impassable), no step over 18° and no ground over 25° side slope, Tobler EVA time, EASY / MODERATE / HARD |
 | `dem_builder.py` | Builds terrain for any polygon: MOLA-HRSC (Mars Orbiter Laser Altimeter and High Resolution Stereo Camera) 200 m base with every overlapping 20 m terrain model from the U.S. Geological Survey (USGS) made from the Context Camera (CTX): a CTX DTM (digital terrain model), levelled and feathered; Thermal Emission Imaging System (THEMIS) day infrared (IR) + CTX imagery. Cached in `Python/imagery_cache/`. Used by `server.py`'s default Gale map and `--polygon` |
-| `export_offline.py` | *(branch `vr-quest`)* Writes the Quest app's offline bundle (`Assets/StreamingAssets/Marsmap/`): exactly the messages the server and feeder would send. High Resolution Imaging Science Experiment (HiRISE) site by default; `--demo`, a CSV or `--polygon` too. Rebuild the app afterwards |
+| `export_offline.py` | Writes the Quest app's offline bundle (`Assets/StreamingAssets/Marsmap/`): exactly the messages the server and feeder would send. High Resolution Imaging Science Experiment (HiRISE) site by default; `--demo`, a CSV or `--polygon` too. Rebuild the app afterwards |
 | `Mars_mapping.ipynb`, `Mars_mapping(3).ipynb` | The team's notebooks: route between spots and the "Martian Trail Recommender", the source of `route_planner.py`'s rules |
 | `make_site.py` | **Real terrain**: HiRISE terrain model + colour photo + slope + thermal inertia around Curiosity's sol-4560 position -> `site/` |
 | `site/` | Made by `make_site.py`: `terrain.csv`, `photo.jpg`, `slope.jpg`, `thermal.jpg`, `site.json` (about 13 megabytes, MB) |
@@ -49,7 +49,7 @@ python3 Python/server.py                      # terminal 1: Gale crater (12 tile
 python3 Python/server.py --site               #   ...or the Curiosity HiRISE site in Python/site/
 python3 Python/server.py --demo               #   ...or the fake demo terrain
 python3 Python/server.py export.csv 1025      #   ...or a JMARS pixel export
-python3 Python/server.py --site --host 0.0.0.0  #   ...also accept a headset on the same Wi-Fi (vr-quest's server prints the address)
+python3 Python/server.py --site --host 0.0.0.0  #   ...also accept a headset on the same Wi-Fi (the server prints the address)
 python3 Python/feeder.py                      # terminal 2: 4-hour EVA in 48 s (demo pace)
 python3 Python/feeder.py --speed 80           #   ...or slower, 3 minutes
 python3 Python/feeder.py --timeline           # print every alert and event the replay sends, no server needed

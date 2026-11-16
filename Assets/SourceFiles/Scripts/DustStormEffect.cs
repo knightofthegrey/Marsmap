@@ -1,5 +1,4 @@
 using UnityEngine;
-using UnityEngine.InputSystem;
 
 /// <summary>
 /// Dust gust: when feeder.py sends the "dust_gust" event, orange fog rolls in (nearby ground
@@ -7,7 +6,9 @@ using UnityEngine.InputSystem;
 /// dusty tint and dust streaks blow past the camera. After the gust it all clears again.
 ///
 /// Created automatically if it isn't in the scene (like PythonConnection).
-/// Press G in Play mode to trigger a test gust without the feeder.
+/// Press G (or Y on a Quest controller) in Play mode to trigger a test gust without the feeder.
+/// In VR the tint is a quad in front of the eyes (IMGUI isn't drawn in a headset) and fewer
+/// dust particles are emitted, to keep the Quest at its frame rate.
 /// </summary>
 public class DustStormEffect : MonoBehaviour
 {
@@ -25,6 +26,8 @@ public class DustStormEffect : MonoBehaviour
     [Range(0f, 1f)] [Tooltip("Sun brightness at the peak, as a fraction of normal")]
     public float sunAtPeak = 0.3f;
     public float maxDustPerSecond = 2200f;
+    [Range(0f, 1f)] [Tooltip("In VR, emit only this fraction of maxDustPerSecond (Quest performance)")]
+    public float vrDustFraction = 0.4f;
     public Vector3 windDirection = new Vector3(1f, 0f, 0.3f);
     public float windSpeed = 22f;
 
@@ -44,6 +47,7 @@ public class DustStormEffect : MonoBehaviour
 
     ParticleSystem dust;
     Texture2D tintTexture;
+    VRHudTint vrTint;       // VR only: replaces the OnGUI tint; made when the first gust blows
 
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
     static void EnsureExists()
@@ -57,11 +61,13 @@ public class DustStormEffect : MonoBehaviour
         Unsubscribe();
         SetIntensity(0f);
         RestoreSettings();
+        DestroyVrTint();
     }
 
     void OnDestroy()
     {
         if (tintTexture != null) Destroy(tintTexture);
+        DestroyVrTint();
     }
 
     /// <summary>Start a gust now. totalSeconds &lt;= 0 uses fade in + holdSeconds + fade out.</summary>
@@ -88,7 +94,7 @@ public class DustStormEffect : MonoBehaviour
     {
         if (!subscribed) TrySubscribe();
 
-        if (testKeyG && Keyboard.current != null && Keyboard.current.gKey.wasPressedThisFrame)
+        if (testKeyG && MarsmapInput.TestGust.WasPressedThisFrame()) // G key or Y button
             TriggerGust();
 
         if (!IsActive) return;
@@ -157,6 +163,8 @@ public class DustStormEffect : MonoBehaviour
     void SetIntensity(float k)
     {
         Intensity = k;
+        bool xr = MarsmapInput.XRActive;
+        UpdateVrTint(xr, k);
         if (k > 0f) SaveSettings();
         if (!settingsSaved) return;
 
@@ -174,14 +182,30 @@ public class DustStormEffect : MonoBehaviour
             sun.color = Color.Lerp(savedSunColor, Color.Lerp(savedSunColor, dustColor, 0.6f), k);
         }
 
-        // Dust streaks around the camera (never created while shutting down, only while dust blows)
+        // Dust streaks around the camera (never created while shutting down, only while dust blows).
+        // EnsureDust re-parents them to Camera.main every frame, so in VR they follow the head.
         if (k > 0f) EnsureDust();
         if (dust != null)
         {
             var emission = dust.emission;
-            emission.rateOverTime = maxDustPerSecond * k;
+            emission.rateOverTime = maxDustPerSecond * k * (xr ? vrDustFraction : 1f);
             if (k > 0f && !dust.isPlaying) dust.Play();
         }
+    }
+
+    // VR: dusty tint on a quad just in front of the eyes, alpha = strength; 0 when idle.
+    // Only made while dust blows, so shutting down (SetIntensity(0) in OnDisable) creates nothing.
+    void UpdateVrTint(bool xr, float k)
+    {
+        float alpha = xr ? peakScreenTint * k : 0f;
+        if (alpha > 0f && vrTint == null) vrTint = VRHud.CreateTint("Dust tint");
+        if (vrTint != null) vrTint.SetColor(new Color(dustColor.r, dustColor.g, dustColor.b, Mathf.Max(0f, alpha)));
+    }
+
+    void DestroyVrTint()
+    {
+        if (vrTint != null) Destroy(vrTint.gameObject);
+        vrTint = null;
     }
 
     void SaveSettings()
@@ -271,10 +295,10 @@ public class DustStormEffect : MonoBehaviour
         }
     }
 
-    // Full-screen dusty tint: also covers the sky, which fog doesn't reach.
+    // Full-screen dusty tint: also covers the sky, which fog doesn't reach. VR uses vrTint instead.
     void OnGUI()
     {
-        if (Intensity <= 0f || peakScreenTint <= 0f || GreenScreen.On) return;
+        if (Intensity <= 0f || peakScreenTint <= 0f || GreenScreen.On || MarsmapInput.XRActive) return;
         if (tintTexture == null)
         {
             tintTexture = new Texture2D(1, 1);

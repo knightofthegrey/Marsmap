@@ -145,9 +145,25 @@ def describe(t_min, msg, speed):
     return f"{when}  {msg['type'].upper()} {msg.get('state', '')}"
 
 
+def encode(msg):
+    """The exact JSON text sent for a message (also used by export_offline.py)."""
+    return json.dumps({"v": SCHEMA_VERSION, **msg})
+
+
+def load_source(samples_path, override=None):
+    """Data credit for the HUD: --source, else the .meta.json next to the CSV."""
+    if override:
+        return override
+    try:
+        with open(os.path.splitext(samples_path)[0] + ".meta.json") as f:
+            return json.load(f)["source"]
+    except (OSError, KeyError, ValueError):
+        return "unknown source (no .meta.json next to the CSV)"
+
+
 async def run(url, messages, speed, eva_min):
     async with websockets.connect(url) as ws:
-        send = lambda msg: ws.send(json.dumps({"v": SCHEMA_VERSION, **msg}))
+        send = lambda msg: ws.send(encode(msg))
         await send({"type": "hello", "from": "feeder"})
         print(f"Connected to {url}; replaying {eva_min:g} EVA minutes at {speed:g}x "
               f"(ends after {eva_min * 60 / speed:.0f} s)")
@@ -179,13 +195,7 @@ def main():
     samples = load_samples(a.samples)
     if "dose_rate_uGy_per_h" not in samples[0]:
         raise SystemExit(f"{a.samples} needs a dose_rate_uGy_per_h column (run fetch_sol.py)")
-    if not a.source:
-        meta_path = os.path.splitext(a.samples)[0] + ".meta.json"
-        try:
-            with open(meta_path) as f:
-                a.source = json.load(f)["source"]
-        except (OSError, KeyError, ValueError):
-            a.source = "unknown source (no .meta.json next to the CSV)"
+    a.source = load_source(a.samples, a.source)
     print(f"Data: {a.source}")
     with open(a.events) as f:
         events = json.load(f)

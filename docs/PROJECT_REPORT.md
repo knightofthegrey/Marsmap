@@ -3,7 +3,7 @@
 > **Final report.** This describes the finished project as it was demoed. The [Changelog](#13-changelog) at the bottom shows how it got here.
 >
 > **State described:** the whole project. The demo was recorded in virtual reality (VR) on a Meta Quest 3 from branch **`vr-quest`**.
-> **Branches:** `main` has the desktop version plus the latest teammate tweaks (F8 green screen, 9 m waypoint arrival, the licence). The VR code (`vr-quest`) and augmented reality (AR) mode (`vr-quest-ar`) are being merged into `main`. Things that are only on those branches so far are marked *(vr-quest)* or *(vr-quest-ar)*.
+> **Branches:** `main` has everything: the desktop version, the VR version and the augmented reality (AR) mode with hand tracking (merged from `vr-quest`), plus the F8 green screen and the licence. `vr-quest` is the branch the demo was recorded from; the AR mode and hand tracking were added to it after the demo.
 > **Event:** National Aeronautics and Space Administration (NASA) Space Apps Challenge 2026, Seattle. Challenge: [Interplanetary Survival Guide: Martian Map](https://www.spaceappschallenge.org/2026/challenges/interplanetary-survival-guide-martian-map/).
 > **Fact-checked** on 14 Nov 2026 against the code, the scene file, git and every linked source; **updated** on 15 Nov 2026 for the final state (environment alerts, the teammates' map, route and minimap features, VR).
 
@@ -44,7 +44,7 @@ A first-person Unity demo of a **Marswalk**: an astronaut walking a 2 km × 2 km
   - Two **simulated hazards**, a dust front and a solar particle event, change the replayed readings the way real events would.
   - An **alert system** watches the readings and warns the astronaut: early warning for dust storms, and alerts when radiation and ultraviolet (UV) reach dangerous levels. Readings, alerts and events are shown on screen. See [ALERTS.md](ALERTS.md).
 
-Python prepares the NASA data and serves it over a local WebSocket. Unity builds the world from what it receives. The same scene runs on a desktop and, on branch `vr-quest`, in VR on a **Meta Quest 3**, which is how the demo was recorded ([§14](#14-vr-meta-quest-3)). On branch `vr-quest-ar`, an **AR mode** shows the heads-up display (HUD) and the EVA map over the real room through the Quest 3's passthrough ([§14.1](#141-ar-mode-passthrough)).
+Python prepares the NASA data and serves it over a local WebSocket. Unity builds the world from what it receives. The same scene runs on a desktop and in VR on a **Meta Quest 3**, which is how the demo was recorded ([§14](#14-vr-meta-quest-3)). An **AR mode** shows the heads-up display (HUD) and the EVA map over the real room through the Quest 3's passthrough cameras, and the map also works with hand tracking ([§14.1](#141-ar-mode-and-hand-tracking)).
 
 ---
 
@@ -56,6 +56,7 @@ Python prepares the NASA data and serves it over a local WebSocket. Unity builds
 | Rendering | Universal Render Pipeline (URP) | 17.6.0 | Terrain shader (`Terrain/Lit`), fog, skybox |
 | Input | Unity Input System | 1.20.1 (the project uses the new Input System only) | Keyboard and mouse; Quest controllers through OpenXR |
 | Extended reality (XR) | XR Plug-in Management, OpenXR (the open standard for VR and AR devices) | 4.7.0, 1.18.0 | Meta Quest 3 build: Android, IL2CPP (Intermediate Language To C++, Unity's ahead-of-time compiler), ARM64 (the 64-bit ARM processor architecture), Meta Quest Support feature |
+| AR and hands | Meta XR Core SDK (software development kit), XR Hands | 207.0.1, 1.9.0 | Quest passthrough (`OVRManager`, `OVRPassthroughLayer`) for AR mode; hand tracking for the EVA map |
 | Camera | Cinemachine | 6.6.0 | First-person pan/tilt camera locked to the player |
 | Networking (Unity) | NativeWebSocket | 2.0.8 (`github.com/endel/NativeWebSocket#upm-2`) | WebSocket client in Unity |
 | UI | uGUI (Unity's built-in user interface system) + TextMeshPro | 2.6.0 | Compass and nav panel (scene Canvas); Immediate Mode Graphical User Interface (IMGUI) for the desktop labels, alerts, minimap and route panel; world-space uGUI for the VR HUD |
@@ -169,8 +170,9 @@ flowchart TB
     MSK["MarsSky<br/>own GameObject"]
     EH["EnvironmentHUD<br/>own GameObject"]
     MV["MapView, Minimap<br/>added at startup"]
-    VRR["VRRig (vr-quest)<br/>own GameObject; does nothing without a headset"]
-    OR["OfflineReplay (vr-quest)<br/>added by PythonConnection in offline mode"]
+    VRR["VRRig<br/>own GameObject; does nothing without a headset"]
+    ARV["ARView<br/>own GameObject, only with ar_passthrough; does nothing on desktop"]
+    OR["OfflineReplay<br/>added by PythonConnection in offline mode"]
   end
   T --> PC
   PC --> TO
@@ -244,7 +246,7 @@ In words:
 6. **What Unity does with the live data:**
    - **`EnvironmentHUD`:**
      - **Alert cards**, top centre: the dust warning counts down the storm's arrival.
-     - **Environment panel:** radiation, EVA dose, UV index, dust, pressure and temperature, under the navigation panel. On `main` the desktop panel was removed (`740b21e`); the VR HUD keeps it *(vr-quest)*.
+     - **Environment panel:** radiation, EVA dose, UV index, dust, pressure and temperature, under the navigation panel. The desktop panel was removed in `740b21e`; the VR HUD keeps it.
      - **Banners** for events and notes from Earth.
      - **When the EVA finishes,** it clears every alert.
    - **`DustStormEffect`:** the fog and dust start on `dust_gust`.
@@ -285,10 +287,11 @@ Marsmap/
 │   ├── New Terrain.asset             Legacy TerrainData file; not used by the runtime terrain
 │   ├── Resources/
 │   │   ├── Hologram.shader           The EVA map hologram's see-through look
-│   │   └── marsmap_config.json       (vr-quest) Server address, offline mode, VR / AR settings (read at startup)
-│   ├── StreamingAssets/Marsmap/      (vr-quest) The headset's offline bundle: terrain + EVA replay (export_offline.py)
-│   ├── XR/                           (vr-quest) OpenXR settings (Meta Quest Support, controller profiles; AR features in vr-quest-ar)
-│   ├── link.xml                      (vr-quest-ar) Keeps the AR Foundation components in IL2CPP builds
+│   │   ├── marsmap_config.json       Server address, offline mode, VR settings, ar_passthrough (read at startup)
+│   │   └── OVR*.asset, Oculus*.asset, ...   Meta XR SDK settings files (added with the SDK)
+│   ├── Oculus/OculusProjectConfig.asset   Meta XR project config (Android manifest features)
+│   ├── StreamingAssets/Marsmap/      The headset's offline bundle: terrain + EVA replay (export_offline.py)
+│   ├── XR/                           OpenXR settings (Meta Quest Support, Meta XR Feature, Hand Tracking Subsystem, controller profiles)
 │   └── SourceFiles/
 │       ├── InputSystem/InputSystem_Actions.inputactions   Project input actions (Cinemachine look input)
 │       └── Scripts/
@@ -297,16 +300,19 @@ Marsmap/
 │           ├── TerrainOverlay.cs     Drapes photo / slope / thermal images on the terrain; L cycles; label
 │           ├── CharacterMover.cs     WASD/arrows, Space jump, Shift sprint, Mars gravity (set in the scene)
 │           ├── DustStormEffect.cs    Dust gust visuals on the dust_gust event; G = test gust
-│           ├── EnvironmentHUD.cs     Alert cards + beeps, event / Earth-note banners (+ environment panel on vr-quest)
+│           ├── EnvironmentHUD.cs     Alert cards + beeps, event / Earth-note banners (environment panel: VR only)
 │           ├── GreenScreen.cs        F8: the 3D view turns pure green, UI only (chroma-key screenshots)
 │           ├── MarsSky.cs            Mars sky gradient, warm ambient light
 │           ├── MapView.cs            EVA map hologram (M): waypoints, planned route, beams, Home Base
 │           ├── Minimap.cs            Heading-up minimap with hazard zones + "upcoming hills" profile
 │           ├── Compass.cs            Compass rose (top-left); PointAt.cs: its waypoint / Home Base arrows
 │           ├── GetState.cs           Nav readout: heading, pitch, latitude, longitude, elevation (top-right)
-│           ├── OfflineReplay.cs      (vr-quest) Plays the bundled terrain + EVA replay with no server (headset)
-│           ├── VR/                   (vr-quest) MarsmapConfig, MarsmapInput (keys + Quest buttons), VRRig (XR rig),
-│           │                         VRHud (head-locked HUD sheet), EnvironmentHUDVR, MinimapVR, MapViewVR
+│           ├── OfflineReplay.cs      Plays the bundled terrain + EVA replay with no server (headset)
+│           ├── VR/                   MarsmapConfig, MarsmapInput (keys + Quest buttons), VRRig (XR rig),
+│           │                         VRHud (head-locked HUD sheet), EnvironmentHUDVR, MinimapVR, MapViewVR;
+│           │                         ARView + MapViewAR (AR mode); HandInput + MapViewHands (hand tracking)
+│           ├── AR/                   Bridge/Passthrough.cs (link to ARView); Meta/MetaPassthrough.cs (Meta passthrough,
+│           │                         compiled only with the Meta XR Core SDK); Meta/Editor/PassthroughProjectSetup.cs
 │           ├── Initialize.cs         Puts the player on the ground (fallback when no Terraingen)
 │           └── CameraFollow.cs, Pickup.cs, UpdateCollectibleCount.cs, MotionAudioController.cs, SimpleMover.cs
 │                                     Leftovers from the Unity tutorial template (SimpleMover: an empty stub); not used
@@ -324,7 +330,7 @@ Marsmap/
     ├── make_site.py                  Downloads HiRISE + THEMIS for the rover's position -> site/
     ├── prep_terrain.py               Earlier HiRISE -> Unity RAW heightmap + cost grid tool; helpers reused
     ├── raster_to_csv.py              Any map file -> CSV grid (values, or slope classes)
-    ├── export_offline.py             (vr-quest) Writes the headset's offline bundle to Assets/StreamingAssets/Marsmap/
+    ├── export_offline.py             Writes the headset's offline bundle to Assets/StreamingAssets/Marsmap/
     ├── events.json                   Scripted demo events and scenarios (hand-written)
     ├── sol_samples.csv               REAL replay data: sol 4560, 09:00-13:00 Mars time, every 5 EVA min (49 rows):
     │                                 dose rate, temperature, pressure, 6 REMS UV bands
@@ -367,7 +373,7 @@ Marsmap/
 | `alerts.py` | Used by `feeder.py` | Telemetry as it's sent; the real sol as the "normal" curve | Changed readings (scenarios), detector estimates, `alert` messages |
 | `route_planner.py` | Used by `server.py` | A `plan_route` message and the terrain being served | A `route` reply: path, legs, distance, Tobler EVA time, climb, hazards, EASY / MODERATE / HARD |
 | `dem_builder.py` | Used by `server.py` (default Gale map, `--polygon`) | A polygon; MOLA-HRSC DEM, USGS CTX DTMs and orthoimages, THEMIS day IR, read remotely | Terrain tiles + images, cached in `Python/imagery_cache/` |
-| `export_offline.py` *(vr-quest)* | Before a headset build | The same inputs as `server.py` + `feeder.py` | The offline bundle in `Assets/StreamingAssets/Marsmap/` |
+| `export_offline.py` | Before a headset build | The same inputs as `server.py` + `feeder.py` | The offline bundle in `Assets/StreamingAssets/Marsmap/` |
 | `raster_to_csv.py` | Optional | Any GeoTIFF / ISIS map file | CSV grid of values or slope classes |
 | `prep_terrain.py` | Optional, older tool | HiRISE terrain model + photo | Unity RAW heightmap, cost grid, `meta.json`; also provides helpers that `make_site.py` uses |
 
@@ -736,7 +742,7 @@ Key: ✅ done · 🟡 partly done · ⬜ not started
 | **Astronaut safety: radiation environment** | ✅ | Real dose rate, normal level and accumulated EVA dose on screen. A simulated solar particle event (shaped on May 2024) is caught by the detector: RADIATION RISING at 1.25× normal, SOLAR PARTICLE EVENT (end the EVA), then SHELTER NOW at 150 µGy/h. Also **UV** alerts from real REMS UV, and **dust storm early warning**. See [ALERTS.md](ALERTS.md) |
 | **Astronaut safety: suits / equipment limit mobility** | 🟡 | Slope hazard layer marks caution (15–20°) and no-go (≥ 20°). A tighter "carrying gear" limit (15°, `LOADED_NOGO_DEG` in `prep_terrain.py`) is defined but not used. Movement isn't suit-limited: 5 m/s walking (15 m/s with Shift), and slopes don't slow or block the player; only gravity (3.72 m/s²) is Mars-real |
 | **Include a route that avoids major obstacles** | ✅ | The EVA map (M; trigger in VR) plans routes through your waypoints with A* (`route_planner.py`, the rules from the team's `Mars_mapping(3).ipynb`): no step steeper than 18°, no ground tilted over 25°, hazard zones, Tobler EVA time, EASY / MODERATE / HARD. It works on whatever terrain is loaded (the HiRISE site or the Gale tiles). The route is drawn on the hologram, the minimap and the ground, with compass arrows to the next waypoint and Home Base |
-| **Pick a format** (habitat display, tablet, helmet HUD, …) | ✅ | **Helmet HUD, first person**, on desktop, in VR on a Meta Quest 3 (the demo), and as AR over the real room (`vr-quest-ar`). HUD: compass with waypoint / Home Base arrows, nav readout (heading, lat/lon, elevation), minimap, EVA route panel, environment panel, alert cards with beeps, banners, map layer label; plus the EVA map hologram |
+| **Pick a format** (habitat display, tablet, helmet HUD, …) | ✅ | **Helmet HUD, first person**, on desktop, in VR on a Meta Quest 3 (the demo), and as AR over the real room (AR mode, with hand tracking). HUD: compass with waypoint / Home Base arrows, nav readout (heading, lat/lon, elevation), minimap, EVA route panel, environment panel, alert cards with beeps, banners, map layer label; plus the EVA map hologram |
 | **Look beyond Mars** (how the Moon was mapped) | ✅ | Slope limits are borrowed from **Artemis** lunar EVA planning (stated in the app). The Apollo/Artemis lesson "always know the way home" is the compass's green Home Base arrow, the Home Base beam and the "return to Home Base" route option. The radiation alerts use NASA SRAG's Artemis/Orion shelter analysis |
 | **Show what to expect with point-of-view imagery** from surface missions | ⬜ | Not built. Curiosity raw images for the same sols are the planned source (<https://mars.nasa.gov/msl/multimedia/raw-images/>) |
 
@@ -750,7 +756,7 @@ Key: ✅ done · 🟡 partly done · ⬜ not started
 | Science stops with a task and a Curiosity photo | ⬜ | |
 | HUD: home arrow, next-target arrow, hazard warnings, time remaining | ✅ | Compass arrows to the next waypoint (red) and Home Base (green); dust, radiation and UV alert cards; EVA clock in the environment panel; EVA time and distance on the route panel |
 | Simulated live conditions: replayed real radiation/weather + scripted events | ✅ | Real RAD + REMS (incl. UV) replayed, simulated dust front and solar event, scripted events; readouts, alerts and banners on screen |
-| Data preparation scripts | 🟡 | Terrain, imagery, slope/hazard, thermal and sol data: `make_site.py`, `fetch_sol.py`, `dem_builder.py`, `raster_to_csv.py`, `prep_terrain.py`, `export_offline.py` (vr-quest). Science-stop preparation not started |
+| Data preparation scripts | 🟡 | Terrain, imagery, slope/hazard, thermal and sol data: `make_site.py`, `fetch_sol.py`, `dem_builder.py`, `raster_to_csv.py`, `prep_terrain.py`, `export_offline.py`. Science-stop preparation not started |
 | Live telemetry service (WebSocket) | ✅ | `server.py` + `feeder.py` |
 | Unity first-person demo on real Mars terrain | ✅ | Desktop and Meta Quest 3 |
 | Top-down hazard minimap | ✅ | `Minimap.cs`: heading-up, hazard zones, route, "upcoming hills" profile |
@@ -782,11 +788,13 @@ Key: ✅ done · 🟡 partly done · ⬜ not started
 - **Replay speed:** at a very high `--speed`, the detector sees too few samples and can skip a level. Lower `--tick` if you speed it up.
 - **Feeder before Play:** alerts sent before Unity connects are missed. Unity only gets the latest `status` and `telemetry` on connecting, not past alerts or events.
 
-**VR** *(vr-quest)* (details in [VR_QUEST.md](VR_QUEST.md))
+**VR and AR** (details in [VR_QUEST.md](VR_QUEST.md))
 - **Stale offline bundle:** the committed bundle (`Assets/StreamingAssets/Marsmap/`) was exported before the alert system, so offline mode has no alerts or UV until `export_offline.py` is run again and the app rebuilt.
 - **Server address:** the committed `marsmap_config.json` points at the event laptop (`ws://10.0.200.213:8765`); change it for another setup. The desktop editor reads it too.
 - **No route planning offline:** the planner runs in `server.py`; offline, the map draws straight lines.
 - **Tiled map in VR:** no floating layer label for tiles, and the big map is heavy for a headset.
+- **AR is set in the config, not in the app:** `"ar_passthrough"` is committed as `true`, so headset builds start in AR; set it to `false` and rebuild for the VR Marswalk. AR mode and hand tracking were added after the demo.
+- **AR needs a build to test:** on a Mac there's no Quest Link, and desktop Play mode ignores AR.
 
 **Data accuracy**
 - **Photo vs. terrain:** within ~1 m at the centre, up to ~10 m off at the corners (0.3° rotation not corrected).
@@ -806,7 +814,7 @@ Key: ✅ done · 🟡 partly done · ⬜ not started
 - **Warnings:** Unity 6 CS0618 "obsolete" warnings for `FindFirstObjectByType` in `Initialize.cs`. Harmless; `FindAnyObjectByType` removes them.
 
 **Repository / team**
-- **Branches:** `vr-quest` is the final, demoed state. `main` and `DataSetIntegration` hold earlier states (`DataSetIntegration` was merged into `main` as pull request (PR) #3); they don't have the VR HUD rework or the Quest 3 build settings.
+- **Branches:** `main` has everything, including VR, AR and hand tracking (`vr-quest` merged in). `vr-quest` is the demoed branch plus the later AR work. `DataSetIntegration` holds an earlier state (it was merged into `main` as pull request (PR) #3).
 - **No JMARS export committed.**
 - **Repo size:**
   - `Python/site/` adds 13 MB (8.5 MB CSV; the JPEGs are stored through Git LFS);
@@ -841,14 +849,15 @@ Key: ✅ done · 🟡 partly done · ⬜ not started
 | 15 Nov 2026 | `a3bfa51` | Docs brought up to the final state on `vr-quest` |
 | 15 Nov 2026 | `740b21e` (main) | Teammate: F8 green screen (`GreenScreen.cs`); waypoint arrival radius 25 → 9 m with a quiet re-plan from your feet on arrival; desktop environment panel removed |
 | 15 Nov 2026 | `f422640` (main) | MIT licence |
-| 15 Nov 2026 | `ea0ba3d` (vr-quest-ar) | AR mode: Quest 3 passthrough with the HUD and EVA map on top ([§14.1](#141-ar-mode-passthrough)) |
-| 15 Nov 2026 | (this commit, main) | Docs and a new README on `main`, covering desktop, VR and AR, with an artificial intelligence (AI) use section |
+| 15 Nov 2026 | `668707d`, `c87ecea`, `14a0a6c` (main) | Docs and a new README on `main`, with an artificial intelligence (AI) use section; data sources re-verified; acronyms spelled out |
+| 15 Nov 2026 | `c47b10d` (vr-quest) | Teammate: AR mode through Meta passthrough (`ARView.cs`, `AR/`), hand tracking for the EVA map (`HandInput.cs`, `MapViewHands.cs`) ([§14.1](#141-ar-mode-and-hand-tracking)) |
+| 15 Nov 2026 | (this commit, main) | `vr-quest` merged into `main`: VR, AR and hand tracking now on `main` alongside the green screen; docs updated |
 
 ---
 
 ## 14. VR (Meta Quest 3)
 
-*(vr-quest; being merged into `main`)*
+*(on `main`, merged from `vr-quest`)*
 
 The demo was recorded in VR on a **Meta Quest 3** from branch `vr-quest`, built on a Mac as an Android app (Unity OpenXR). Full guide, including the setup steps that are easy to miss: [docs/VR_QUEST.md](VR_QUEST.md).
 
@@ -867,24 +876,21 @@ The demo was recorded in VR on a **Meta Quest 3** from branch `vr-quest`, built 
   - `Python/export_offline.py` writes the exact server and feeder messages to `Assets/StreamingAssets/Marsmap/` (the HiRISE site: 5.1 MB of terrain plus a 48 s replay).
   - `OfflineReplay.cs` plays them through `PythonConnection.InjectMessage`, so the headset needs no laptop.
   - The committed bundle was exported before the alert system. Re-run the export to get alerts and UV offline.
-- **Build:** Android, IL2CPP, ARM64, OpenXR with Meta Quest Support and the Oculus Touch / Touch Plus profiles, package `com.marsmap.eva`. These settings are committed on this branch.
+- **Build:** Android, IL2CPP, ARM64, OpenXR with Meta Quest Support and the Oculus Touch / Touch Plus profiles, package `com.marsmap.eva`, minimum Android API level 32. These settings are committed.
 
 **Desktop is unchanged:** with no headset, the VR scripts do nothing, and `auto` mode only falls back to the bundle inside a headset.
 
-### 14.1 AR mode (passthrough)
+### 14.1 AR mode and hand tracking
 
-*(vr-quest-ar)* AR mode hides the 3D Mars world and keeps the overlay: in the Quest 3 you see **your real room** through the headset's colour passthrough, with the HUD on top and the EVA map hologram at table height. Full setup: [docs/VR_QUEST.md](VR_QUEST.md#ar-mode-passthrough).
+A teammate added both after the demo (`c47b10d`). Full setup and controls: [docs/VR_QUEST.md](VR_QUEST.md#ar-mode-quest-3-passthrough).
 
-- **Switching:** click the right stick (stick centred) to switch between Mars and AR at any time. **P** previews it on desktop over black. `"passthrough": true` in `marsmap_config.json` starts in AR mode.
-- **Hidden:** the terrain's drawing (its data and collider stay, so the minimap, the readouts and route planning still work), the Mars sky and fog, scene objects, and the map's ground markers (route line, beams, ring, Home Base sphere, ground tags).
-- **Stays:** the whole HUD sheet, the EVA map (hologram, panel, laser, pins), the dust storm's tint and streaks, alerts and the replay.
-- **How (`VR/PassthroughView.cs`):**
-  - **The camera** clears to transparent black (0,0,0,0) with high dynamic range (HDR) and post-processing off. The Quest's render settings would otherwise drop the transparency the passthrough needs.
-  - **Passthrough itself:** AR Foundation's **AR Session** and **AR Camera Manager** are added by name the first time AR mode turns on. The camera manager is then switched on and off with the mode. Because they're added by name, the project compiles without the packages, and AR mode then shows the HUD over black.
-  - **Builds:** `Assets/link.xml` keeps both components in IL2CPP builds.
-  - **The hologram's shader** blends alpha for the Quest's premultiplied compositing.
-- **Setup:**
-  - **Packages:** AR Foundation 6.6.2 and Unity OpenXR: Meta 2.6.1, which brings Composition Layers 2.6.1. Both ship with Unity 6000.6.9f1.
-  - **OpenXR features** (Android tab): Meta Quest feature group with **Composition Layers Support**, **Meta Quest: Session** and **Meta Quest: Camera (Passthrough)**; the unused Meta features stay off.
-  - **Player settings:** minimum API **32** (Android 12L).
-- **Status:** the setup passes Project Validation. AR mode was written after the demo. The team's own AR work on `vr-quest` may differ; this section describes `vr-quest-ar`.
+- **What you see:** with `"ar_passthrough": true` in `marsmap_config.json` (the committed setting), the Quest 3 shows **your real room** through its passthrough cameras, with the whole HUD on top. When the EVA map is open, its hologram, pins, labels, side panel and laser show too. The Mars terrain, sky, dust and the markers on the ground aren't drawn. There's no in-app switch: change the key and rebuild.
+- **The EVA keeps running underneath:** you still stand on and walk over the invisible terrain, so the compass, waypoints, minimap, route planning and alerts work as in VR. The hologram is kept 30 cm above the real floor.
+- **How (`VR/ARView.cs`):**
+  - **Passthrough** comes from the Meta XR Core SDK: an `OVRManager` with Insight Passthrough on and an `OVRPassthroughLayer` underlay (`AR/Meta/MetaPassthrough.cs`).
+  - **Hiding Mars:** every camera drawing to the headset clears to see-through black and draws only the UI layer; the HUD sheet and the map's pieces (`VR/MapViewAR.cs`) are moved onto that layer as they appear. High dynamic range (HDR) is switched off, because URP's 32-bit HDR buffer has no alpha channel.
+  - **Fallback:** the VR view stays until passthrough is actually running; if it doesn't start within 10 s, the app stays in VR and logs why (`[ARView]`).
+  - **Builds without the SDK:** the Meta code is in its own assembly that only compiles when `com.meta.xr.sdk.core` is installed; `AR/Bridge/Passthrough.cs` links it to `ARView`, so the project still builds and runs in VR without it.
+  - **The hologram's shader** blends alpha "over", so the room shows through it exactly as much as it's see-through.
+- **Hand tracking (`VR/HandInput.cs`, `VR/MapViewHands.cs`, XR Hands package):** put the controllers down and the whole EVA map works with hands, in VR and AR. Left palm up and held ~0.7 s opens or closes it; point and pinch adds or removes a waypoint and presses panel buttons; pinch and move turns and tilts the hologram; a two-hand pinch zooms and slides the area shown.
+- **Setup:** the Meta XR Core SDK 207.0.1 and XR Hands 1.9.0 are in `Packages/manifest.json`. `AR/Meta/Editor/PassthroughProjectSetup.cs` turns on the needed settings when the editor loads (OpenXR Meta XR Feature and Hand Tracking Subsystem on Android; Passthrough Support and hand-tracking support in the Meta XR project config), or from **Marsmap → AR: Set Up Quest Passthrough**. Minimum Android API level is 32.

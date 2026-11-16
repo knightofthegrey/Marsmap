@@ -15,6 +15,8 @@ using UnityEngine.UI;
 /// Hologram controls: drag sideways to turn, drag up/down to tilt (T: top-down), scroll zoom, WASD or right-drag move the area shown,
 /// click add a waypoint, Shift+click remove one, Backspace undo, C clear, R return to Home Base on/off,
 /// F centre on you, M close.
+/// In a headset (Meta Quest) the Menu button opens it and the right controller is a laser
+/// pointer; see MapViewVR.cs (VR/) for the controller layout and the VR panel.
 ///
 /// On the ground only the leg you're on is shown: an arrowed line from where you are (or the last
 /// waypoint) to the next waypoint, which is marked by a glowing beam and a ring showing its
@@ -24,7 +26,7 @@ using UnityEngine.UI;
 /// (found by their arrowred / arrowgreen images). Home Base is where you're put on the map.
 /// Adds itself next to Terraingen at startup, so nothing has to be set up in the scene.
 /// </summary>
-public class MapView : MonoBehaviour
+public partial class MapView : MonoBehaviour
 {
     [Header("Hologram")]
     [Tooltip("Width of the hologram (m)")]
@@ -159,6 +161,8 @@ public class MapView : MonoBehaviour
 
     // ---- read by Minimap.cs
     public bool IsOpen => open;
+    /// <summary>True while any EVA map hologram is open (VRRig pauses snap turn then).</summary>
+    public static bool AnyOpen { get; private set; }
     public int RouteVersion { get; private set; }  // changes whenever the route or leg changes
     public float[] RouteX => routeX;
     public float[] RouteZ => routeZ;
@@ -183,6 +187,9 @@ public class MapView : MonoBehaviour
 
     const float HoloLift = 0.004f;        // route/pins float this far above the hologram terrain
     const float HoloPlate = 0.015f;       // the terrain sits on a plate this thick
+
+    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+    static void ResetStatics() => AnyOpen = false; // fresh on every Play, even without a domain reload
 
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
     static void EnsureExists()
@@ -242,7 +249,9 @@ public class MapView : MonoBehaviour
             subscribedTo.ConnectionChanged -= OnConnectionChanged;
         }
         if (open) Close();
-        if (lookInput != null) lookInput.enabled = true;
+        AnyOpen = false;
+        if (lookInput != null && !MarsmapInput.XRActive) lookInput.enabled = true; // VRRig keeps it off in VR
+        DestroyVR();
         foreach (var kv in originalDest)
             if (kv.Key != null) kv.Key.dest = kv.Value; // arrows back to what they pointed at
         if (targetBeam != null) Destroy(targetBeam);
@@ -268,21 +277,34 @@ public class MapView : MonoBehaviour
         if (reenableLookNextFrame)
         {
             reenableLookNextFrame = false;
-            if (!open && lookInput != null) lookInput.enabled = true;
+            if (!open && lookInput != null && !MarsmapInput.XRActive) lookInput.enabled = true;
         }
         Subscribe();
         TakeHomeBase();
         Keyboard kb = Keyboard.current;
         Mouse mouse = Mouse.current;
 
-        if (kb != null && kb.mKey.wasPressedThisFrame)
+        bool vr = MarsmapInput.XRActive;
+        bool handToggle = vr && HandMapGesture();   // left palm up, held (hand tracking)
+        if ((kb != null && kb.mKey.wasPressedThisFrame) || MarsmapInput.MapToggle.WasPressedThisFrame()
+            || (!open && MarsmapInput.MapOpenAlt.WasPressedThisFrame()) || handToggle)
         {
             if (open) Close();
             else Open();
         }
-        if (open && kb != null && mouse != null) HologramControls(kb, mouse);
-        if (open && rebuildPending && Time.unscaledTime - lastRebuild > 0.1f) BuildHologram();
-        if (open) AimAtHologram();
+        if (open)
+        {
+            if (openedInVR)
+            {
+                VRControls();                      // laser pointer + controller buttons
+                if (open) HandControls();          // hand tracking: point + pinch, drag, two-hand zoom (a panel button may have closed it)
+            }
+            else if (kb != null && mouse != null) HologramControls(kb, mouse);
+            AnimateHologram();
+        }
+        // In a headset rebuild less often: a Quest is slower and the sticks zoom/move continuously
+        if (open && rebuildPending && Time.unscaledTime - lastRebuild > (openedInVR ? 0.25f : 0.1f)) BuildHologram();
+        if (open && !openedInVR) AimAtHologram();
 
         if (replanAt > 0f && Time.unscaledTime >= replanAt)
         {
@@ -298,6 +320,8 @@ public class MapView : MonoBehaviour
         UpdateGuidance();
         UpdateGroundSizes();
         if (open && holoYou != null && player != null) PlacePin(holoYou, player.position, 1.3f);
+        if (vr) UpdateVRLabels();
+        else if (vrRouteLabel != null || vrPanel != null) DestroyVR(); // headset gone
     }
 
     // You always start at Home Base: wherever Terraingen put you on the map (again on a new map)
@@ -355,15 +379,20 @@ public class MapView : MonoBehaviour
         Camera cam = Camera.main;
         Transform eye = cam != null ? cam.transform : player;
         if (eye == null) return;
+        openedInVR = MarsmapInput.XRActive;
+        float distance = openedInVR ? vrHologramDistance : hologramDistance;
+        belowEyes = openedInVR ? vrHologramBelowEyes : hologramBelowEyes;
 
         if (holoRoot == null) CreateHologram();
         Vector3 forward = Vector3.ProjectOnPlane(eye.forward, Vector3.up);
         if (forward.sqrMagnitude < 1e-4f) forward = Vector3.ProjectOnPlane(eye.up, Vector3.up);
         forward.Normalize();
-        Vector3 at = eye.position + forward * hologramDistance + Vector3.down * hologramBelowEyes;
-        at.y = Mathf.Max(at.y, terraingen.GroundY(at) + 0.3f); // not inside a hill in front of you
+        Vector3 at = eye.position + forward * distance + Vector3.down * belowEyes;
+        // Not inside a hill in front of you. In AR the hills aren't shown: keep it off the real floor.
+        float ground = ARView.Active ? ARView.FloorY(eye) : terraingen.GroundY(at);
+        at.y = Mathf.Max(at.y, ground + 0.3f);
         holoBase = at;
-        holoGroundY = terraingen.GroundY(at);
+        holoGroundY = ground;
         viewForward = forward;
         viewRight = Vector3.Cross(Vector3.up, forward);
         mapYaw = 0f; // north on the hologram = real north, so it lines up with what's around you
@@ -382,16 +411,22 @@ public class MapView : MonoBehaviour
             radius = Mathf.Max(whole.width, whole.height) * 0.5f; // ...and this is the furthest out zoom
         }
         open = true;
+        AnyOpen = true;
         BuildHologram();
 
+        if (mover != null) mover.inputLocked = true; // no walking, but gravity still works
+        reenableLookNextFrame = false;
+        if (openedInVR)
+        {
+            OpenVR(eye); // panel beside the hologram, laser on; the headset keeps looking freely
+            return;
+        }
         if (panTilt != null)
         {
             savedPan = panTilt.PanAxis.Value;
             savedTilt = panTilt.TiltAxis.Value;
         }
-        if (mover != null) mover.inputLocked = true; // no walking, but gravity still works
         if (lookInput != null) lookInput.enabled = false;
-        reenableLookNextFrame = false;
         Cursor.lockState = CursorLockMode.None;
         Cursor.visible = true;
     }
@@ -399,16 +434,22 @@ public class MapView : MonoBehaviour
     void Close()
     {
         open = false;
+        AnyOpen = false;
         if (holoRoot != null) holoRoot.SetActive(false);
+        if (mover != null) mover.inputLocked = false;
+        leftDown = dragged = false;
+        if (openedInVR)
+        {
+            CloseVR();
+            return;
+        }
         if (panTilt != null)
         {
             panTilt.PanAxis.Value = savedPan;
             panTilt.TiltAxis.Value = savedTilt;
         }
-        if (mover != null) mover.inputLocked = false;
         // Re-locking the cursor can report one big mouse jump: turn the look back on next frame
         reenableLookNextFrame = true;
-        leftDown = dragged = false;
         Cursor.lockState = CursorLockMode.Locked;
         Cursor.visible = false;
     }
@@ -468,7 +509,12 @@ public class MapView : MonoBehaviour
 
         builtCentre = centre;
         builtRadius = radius;
-        int n = hologramResolution;
+        if (holoContent != null) // undo a two-hand zoom / slide shown before this rebuild (MapViewHands)
+        {
+            holoContent.localPosition = Vector3.zero;
+            holoContent.localScale = Vector3.one;
+        }
+        int n = openedInVR ? Mathf.Min(hologramResolution, vrHologramResolution) : hologramResolution;
         float step = 2f * radius / (n - 1);
         var elev = new float[n * n];
         var outside = new bool[n * n];
@@ -602,15 +648,42 @@ public class MapView : MonoBehaviour
         }
         if (kb.qKey.isPressed) { mapYaw += 60f * Time.unscaledDeltaTime; yawTarget = float.NaN; }
         if (kb.eKey.isPressed) { mapYaw -= 60f * Time.unscaledDeltaTime; yawTarget = float.NaN; }
-        // T: swing between lying flat and standing up (top-down view)
-        // T: swing between lying flat and standing up (top-down view, north at the top)
-        if (kb.tKey.wasPressedThisFrame)
-        {
-            tiltTarget = tilt < 45f ? 90f : 0f;
-            // Standing up shows the direction you face as "up"; turning it by your heading puts
-            // north there instead. Lying back down, it turns back to north = real north.
-            yawTarget = tiltTarget == 90f ? Mathf.Atan2(viewForward.x, viewForward.z) * Mathf.Rad2Deg : 0f;
-        }
+        if (kb.tKey.wasPressedThisFrame) ToggleTopDown();
+
+        // Move the area shown: WASD (relative to how the hologram faces you) or right-drag
+        Vector2 move = Vector2.zero;
+        float keys = radius * 0.8f * Time.unscaledDeltaTime;
+        if (kb.wKey.isPressed || kb.upArrowKey.isPressed) move.y += keys;
+        if (kb.sKey.isPressed || kb.downArrowKey.isPressed) move.y -= keys;
+        if (kb.dKey.isPressed || kb.rightArrowKey.isPressed) move.x += keys;
+        if (kb.aKey.isPressed || kb.leftArrowKey.isPressed) move.x -= keys;
+        if (mouse.rightButton.isPressed) move -= mouse.delta.ReadValue() * (radius * 0.004f);
+        MoveArea(move);
+        if (kb.fKey.wasPressedThisFrame) CentreOnYou();
+
+        // Scroll: zoom (one wheel notch is 120 on some systems, 1 on others)
+        float scroll = mouse.scroll.ReadValue().y;
+        if (scroll != 0f && !overPanel) Zoom(Mathf.Clamp(Mathf.Abs(scroll) > 20f ? scroll / 120f : scroll, -3f, 3f));
+
+        if (kb.backspaceKey.wasPressedThisFrame) UndoWaypoint();
+        if (kb.cKey.wasPressedThisFrame) ClearWaypoints();
+        if (kb.rKey.wasPressedThisFrame) ToggleRoundTrip();
+    }
+
+    // ---- Map actions shared by the desktop keys and the VR controllers
+
+    // Swing between lying flat and standing up (top-down view, north at the top)
+    void ToggleTopDown()
+    {
+        tiltTarget = tilt < 45f ? 90f : 0f;
+        // Standing up shows the direction you face as "up"; turning it by your heading puts
+        // north there instead. Lying back down, it turns back to north = real north.
+        yawTarget = tiltTarget == 90f ? Mathf.Atan2(viewForward.x, viewForward.z) * Mathf.Rad2Deg : 0f;
+    }
+
+    // T's swing (and its turn to north-up), then the pose
+    void AnimateHologram()
+    {
         if (tiltTarget >= 0f)
         {
             tilt = Mathf.MoveTowards(tilt, tiltTarget, 180f * Time.unscaledDeltaTime);
@@ -622,47 +695,44 @@ public class MapView : MonoBehaviour
             if (Mathf.Approximately(Mathf.DeltaAngle(mapYaw, yawTarget), 0f)) yawTarget = float.NaN;
         }
         PoseHologram();
+    }
 
-        // Move the area shown: WASD (relative to how the hologram faces you) or right-drag
-        Vector2 move = Vector2.zero;
-        float keys = radius * 0.8f * Time.unscaledDeltaTime;
-        if (kb.wKey.isPressed || kb.upArrowKey.isPressed) move.y += keys;
-        if (kb.sKey.isPressed || kb.downArrowKey.isPressed) move.y -= keys;
-        if (kb.dKey.isPressed || kb.rightArrowKey.isPressed) move.x += keys;
-        if (kb.aKey.isPressed || kb.leftArrowKey.isPressed) move.x -= keys;
-        if (mouse.rightButton.isPressed) move -= mouse.delta.ReadValue() * (radius * 0.004f);
-        if (move != Vector2.zero)
-        {
-            // Screen directions -> the hologram's own axes (it can be turned).
-            // Up/forward = towards the hologram's far edge whether it lies flat or stands up,
-            // so only its turn (not its tilt) matters here
-            Vector3 local = Quaternion.Inverse(Quaternion.Euler(0f, mapYaw, 0f))
-                            * (viewRight * move.x + viewForward * move.y);
-            centre += new Vector2(local.x, local.z);
-            rebuildPending = true;
-        }
-        if (kb.fKey.wasPressedThisFrame && player != null)
-        {
-            centre = new Vector2(player.position.x, player.position.z);
-            rebuildPending = true;
-        }
+    // move: metres along your view when it opened (x right, y away from you)
+    void MoveArea(Vector2 move)
+    {
+        if (move == Vector2.zero) return;
+        // Screen directions -> the hologram's own axes (it can be turned).
+        // Up/forward = towards the hologram's far edge whether it lies flat or stands up,
+        // so only its turn (not its tilt) matters here
+        Vector3 local = Quaternion.Inverse(Quaternion.Euler(0f, mapYaw, 0f))
+                        * (viewRight * move.x + viewForward * move.y);
+        centre += new Vector2(local.x, local.z);
+        rebuildPending = true;
+    }
 
-        // Scroll: zoom (one wheel notch is 120 on some systems, 1 on others)
-        float scroll = mouse.scroll.ReadValue().y;
-        if (scroll != 0f && !overPanel)
-        {
-            float steps = Mathf.Clamp(Mathf.Abs(scroll) > 20f ? scroll / 120f : scroll, -3f, 3f);
-            radius *= Mathf.Pow(0.85f, steps);
-            rebuildPending = true;
-        }
+    void CentreOnYou()
+    {
+        if (player == null) return;
+        centre = new Vector2(player.position.x, player.position.z);
+        rebuildPending = true;
+    }
 
-        if (kb.backspaceKey.wasPressedThisFrame && waypoints.Count > 0) RemoveWaypoint(waypoints.Count - 1);
-        if (kb.cKey.wasPressedThisFrame) ClearWaypoints();
-        if (kb.rKey.wasPressedThisFrame)
-        {
-            roundTrip = !roundTrip;
-            ScheduleReplan();
-        }
+    // steps > 0: zoom in
+    void Zoom(float steps)
+    {
+        radius *= Mathf.Pow(0.85f, steps);
+        rebuildPending = true;
+    }
+
+    void UndoWaypoint()
+    {
+        if (waypoints.Count > 0) RemoveWaypoint(waypoints.Count - 1);
+    }
+
+    void ToggleRoundTrip()
+    {
+        roundTrip = !roundTrip;
+        ScheduleReplan();
     }
 
     // Keep the hologram in the middle of your view: while it's open, the first-person look
@@ -690,7 +760,7 @@ public class MapView : MonoBehaviour
     {
         Quaternion rot = Quaternion.AngleAxis(-tilt, viewRight) * Quaternion.Euler(0f, mapYaw, 0f);
         float up = Mathf.Sin(tilt * Mathf.Deg2Rad);
-        Vector3 pos = holoBase + Vector3.up * (up * hologramBelowEyes);
+        Vector3 pos = holoBase + Vector3.up * (up * belowEyes);
         float lowestEdge = pos.y - up * hologramSize * 0.5f;
         if (lowestEdge < holoGroundY + 0.1f) pos.y += holoGroundY + 0.1f - lowestEdge;
         holoRoot.transform.SetPositionAndRotation(pos, rot);
@@ -702,12 +772,19 @@ public class MapView : MonoBehaviour
     void AddWaypointAt(Vector2 screen)
     {
         Camera cam = Camera.main;
-        if (cam == null || holoCollider == null) return;
+        if (cam != null) AddWaypointAt(cam.ScreenPointToRay(screen));
+    }
+
+    // From the mouse (through the screen) or the VR laser
+    void AddWaypointAt(Ray ray)
+    {
+        if (holoCollider == null) return;
         if (rebuildPending) BuildHologram(); // just zoomed/moved: click on the area you asked for
         Physics.SyncTransforms(); // the collider must match the pose drawn on screen (it may be turning)
-        if (!holoCollider.Raycast(cam.ScreenPointToRay(screen), out RaycastHit hit, 50f))
+        if (!holoCollider.Raycast(ray, out RaycastHit hit, 50f))
         {
-            status = "Click on the hologram to add a waypoint.";
+            status = openedInVR ? "Point the laser at the hologram to add a waypoint."
+                                : "Click on the hologram to add a waypoint.";
             return;
         }
         Vector2 xz = FromHolo(holoContent.InverseTransformPoint(hit.point));
@@ -1122,6 +1199,11 @@ public class MapView : MonoBehaviour
 
         if (redArrow != null) redArrow.orbitRadius = compassArrowRadius;
         if (greenArrow != null) greenArrow.orbitRadius = compassArrowRadius;
+        // In a headset the compass turns with your head (VRRig), so the arrows must read it too;
+        // VRRig only retargets arrows that existed when it set up, not the red one added here
+        Transform facing = Facing;
+        if (redArrow != null && redArrow.playerTransform == player) redArrow.playerTransform = facing;
+        if (greenArrow != null && greenArrow.playerTransform == player) greenArrow.playerTransform = facing;
 
         // Shown only when they have something to point at
         if (redArrow != null)
@@ -1365,6 +1447,7 @@ public class MapView : MonoBehaviour
             smallStyle = new GUIStyle(boxStyle) { fontSize = 12, alignment = TextAnchor.MiddleCenter, wordWrap = false };
         }
         helpRect = routeRect = Rect.zero;
+        if (MarsmapInput.XRActive) return; // a headset doesn't draw IMGUI: MapViewVR.cs has world-space versions
         Camera cam = Camera.main;
 
         // Hologram open: a number on every pin
@@ -1472,7 +1555,8 @@ public class MapView : MonoBehaviour
         GUI.Label(r, text, tagStyle);
     }
 
-    string RouteText()
+    // withStatus false: leave the status line out (the VR panel shows it at the top instead)
+    string RouteText(bool withStatus = true)
     {
         var sb = new StringBuilder();
         if (!open)
@@ -1495,9 +1579,11 @@ public class MapView : MonoBehaviour
         }
 
         if (waypoints.Count == 0)
-            return "<b>EVA ROUTE</b>\nClick on the hologram to add waypoints. The route starts where you stand.\n" +
+            return "<b>EVA ROUTE</b>\n" + (openedInVR ? "Point the laser at the hologram and pull the trigger to add waypoints."
+                                                     : "Click on the hologram to add waypoints.") +
+                   " The route starts where you stand.\n" +
                    "<size=11>Colours: " + Legend() + "</size>" +
-                   (string.IsNullOrEmpty(status) ? "" : $"\n<size=11>{status}</size>");
+                   (!withStatus || string.IsNullOrEmpty(status) ? "" : $"\n<size=11>{status}</size>");
 
         sb.Append($"<b>EVA ROUTE</b>  {waypoints.Count} waypoint{(waypoints.Count == 1 ? "" : "s")}" +
                   (roundTrip ? ", back to Home Base" : ""));
@@ -1525,7 +1611,7 @@ public class MapView : MonoBehaviour
         if (route != null && route.hazards != null) // also when there's no route (e.g. all snapped)
             foreach (string h in route.hazards)
                 sb.Append($"<size=11><color=#F0C080>! {h}</color></size>\n");
-        if (!string.IsNullOrEmpty(status)) sb.Append($"<size=11>{status}</size>");
+        if (withStatus && !string.IsNullOrEmpty(status)) sb.Append($"<size=11>{status}</size>");
         return sb.ToString().TrimEnd('\n');
     }
 

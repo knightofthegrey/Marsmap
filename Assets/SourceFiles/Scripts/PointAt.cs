@@ -44,7 +44,10 @@ public class PointAt : MonoBehaviour
         Vector3 centre = dial.TransformPoint(dial.rect.center); // doesn't move as the dial turns
         float rimRadius = dial.rect.width * 0.5f * dial.lossyScale.x * orbitRadius;
         float clockwise = -dialZ * Mathf.Deg2Rad;
-        arrow.position = centre + new Vector3(Mathf.Sin(clockwise), Mathf.Cos(clockwise), 0f) * rimRadius;
+        // In the canvas's own plane: on screen that's x/y, but in a headset the canvas floats in
+        // front of your face and turns with it (VRRig), so world x/y would drift off the dial
+        Transform plane = dial.parent != null ? dial.parent : dial;
+        arrow.position = centre + (plane.right * Mathf.Sin(clockwise) + plane.up * Mathf.Cos(clockwise)) * rimRadius;
     }
 
     RectTransform FindDial()

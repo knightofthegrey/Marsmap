@@ -8,7 +8,7 @@ The heads-up display (HUD) warns the astronaut about three hazards: **dust storm
 | Detector | `Python/alerts.py` (`AlertDetector`) | Watches the telemetry only and decides the alerts |
 | Feeder | `Python/feeder.py` | Runs both and sends `telemetry` + `alert` messages |
 | HUD | `Assets/SourceFiles/Scripts/EnvironmentHUD.cs` | Alert cards, event banners, beeps (desktop) |
-| Virtual reality (VR) HUD | `Assets/SourceFiles/Scripts/VR/EnvironmentHUDVR.cs` | The same in a headset, plus the environment panel *(branch `vr-quest`)* |
+| Virtual reality (VR) HUD | `Assets/SourceFiles/Scripts/VR/EnvironmentHUDVR.cs` | The same in a headset (VR and AR mode), plus the environment panel |
 | Dust storm | `Assets/SourceFiles/Scripts/DustStormEffect.cs` | Fog, orange tint and blowing dust on the `dust_gust` event (G = test) |
 
 Preview the whole demo without Unity or a server:
@@ -146,14 +146,14 @@ The result for Gale is about 45 at 09:00 and about 175 at 11:00. That is consist
   - **Tag:** each card says whether it comes from **real data** or a **simulated** event.
   - **Countdown:** a dust warning counts the storm's arrival down on the EVA clock.
 - **Banners** under the cards show EVA events, notes from Earth and cleared alerts for 6 s.
-- **Environment panel**, under the navigation panel (top-right). On `main` this desktop panel was removed (`740b21e`); the VR HUD on `vr-quest` keeps it:
+- **Environment panel**, under the navigation panel (top-right), **in the headset only**. The desktop panel was removed in `740b21e` (the green-screen change); the VR HUD keeps it:
   - shows the EVA clock and Mars time, radiation (and its normal level), EVA dose, UV index, dust, pressure and air temperature;
   - each value is coloured by its alert level;
   - a **SIMULATED** line appears while a scenario is changing the data;
   - it's hidden while the EVA map (M) is open.
 - **When the EVA finishes**, every alert card and banner clears. An "EVA COMPLETE" banner shows the dose for 6 s.
 
-**In VR** (`VR/EnvironmentHUDVR.cs`, branch `vr-quest`): a headset doesn't draw the desktop's Immediate Mode Graphical User Interface (IMGUI), so the same cards, banners and panel are rebuilt on the head-locked VR HUD sheet, in the same places (top centre; under the navigation panel). The cards have to stay above the centre of your view, so they're fitted in this order:
+**In VR** (`VR/EnvironmentHUDVR.cs`; in AR mode too, over the real room): a headset doesn't draw the desktop's Immediate Mode Graphical User Interface (IMGUI), so the same cards, banners and panel are rebuilt on the head-locked VR HUD sheet, in the same places (top centre; under the navigation panel). The cards have to stay above the centre of your view, so they're fitted in this order:
 1. **Title lines first.** Every alert and banner gets at least its title line.
 2. **"+N more" always fits.** Anything that doesn't fit is counted in a "+N more" line, and the least important title lines make way for it.
 3. **The newest beep opens first.** Cards then open up in full: the alert that just beeped, then the most severe, the banners, the rest.

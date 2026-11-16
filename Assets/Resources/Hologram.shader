@@ -1,6 +1,7 @@
 // Hologram look for MapView's terrain model: the mesh's vertex colours (hazard zones +
 // shading), slightly see-through, with faint moving scanlines and a cyan glow on edges that
 // face away from you. Lives in Assets/Resources so builds always include it.
+// Stereo-instancing ready (the UNITY_* macros), so a Quest headset draws it in both eyes.
 Shader "Marsmap/Hologram"
 {
     Properties
@@ -13,7 +14,9 @@ Shader "Marsmap/Hologram"
     SubShader
     {
         Tags { "RenderType" = "Transparent" "Queue" = "Transparent" "RenderPipeline" = "UniversalPipeline" }
-        Blend SrcAlpha OneMinusSrcAlpha
+        // Colour: normal see-through blending. Alpha: "over" (not alpha squared), so in AR the
+        // passthrough compositor shows the room through it exactly as much as it's see-through.
+        Blend SrcAlpha OneMinusSrcAlpha, One OneMinusSrcAlpha
         ZWrite On
         Cull Off
 
@@ -25,6 +28,7 @@ Shader "Marsmap/Hologram"
             HLSLPROGRAM
             #pragma vertex Vert
             #pragma fragment Frag
+            #pragma multi_compile_instancing
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
 
             CBUFFER_START(UnityPerMaterial)
@@ -38,6 +42,7 @@ Shader "Marsmap/Hologram"
                 float4 positionOS : POSITION;
                 float3 normalOS   : NORMAL;
                 half4  color      : COLOR;
+                UNITY_VERTEX_INPUT_INSTANCE_ID
             };
 
             struct Varyings
@@ -47,11 +52,14 @@ Shader "Marsmap/Hologram"
                 float3 normalWS   : TEXCOORD0;
                 float3 viewWS     : TEXCOORD1;
                 float3 positionWS : TEXCOORD2;
+                UNITY_VERTEX_OUTPUT_STEREO
             };
 
             Varyings Vert(Attributes v)
             {
-                Varyings o;
+                Varyings o = (Varyings)0;
+                UNITY_SETUP_INSTANCE_ID(v);
+                UNITY_INITIALIZE_VERTEX_OUTPUT_STEREO(o);
                 float3 p = TransformObjectToWorld(v.positionOS.xyz);
                 o.positionCS = TransformWorldToHClip(p);
                 o.color = v.color;
@@ -63,6 +71,7 @@ Shader "Marsmap/Hologram"
 
             half4 Frag(Varyings i) : SV_Target
             {
+                UNITY_SETUP_STEREO_EYE_INDEX_POST_VERTEX(i);
                 half3 n = normalize(i.normalWS + 1e-5);
                 half3 view = normalize(i.viewWS);
                 half edge = pow(1.0h - saturate(abs(dot(n, view))), 3.0h);

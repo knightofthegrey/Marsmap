@@ -1,0 +1,12 @@
+{
+  "_comment": "Marsmap settings, read at Play (also inside headset builds). server_url: Python/server.py's address; on a headset use the laptop's Wi-Fi IP, e.g. ws://192.168.1.23:8765, and start the server with --host 0.0.0.0. mode: auto = server if it answers within offline_after_s seconds, else the offline bundle in StreamingAssets/Marsmap; server = always the server; offline = never connect, use the bundle. offline_auto_start_s: 0 = start the EVA replay with X / Enter; otherwise start automatically this many seconds after the terrain loads. vr_*: comfort settings used only in a headset (desktop movement is unchanged). ar_passthrough: true = AR on a Quest 3: the passthrough camera shows the room and only the HUD and the EVA map are drawn (needs the Meta XR Core SDK; falls back to VR if passthrough cannot start). See docs/VR_QUEST.md.",
+  "server_url": "ws://10.0.200.213:8765",
+  "mode": "auto",
+  "offline_after_s": 2.5,
+  "offline_auto_start_s": 0,
+  "vr_move_speed": 3,
+  "vr_sprint_multiplier": 2,
+  "snap_turn_degrees": 30,
+  "allow_jump_in_vr": false,
+  "ar_passthrough": true
+}

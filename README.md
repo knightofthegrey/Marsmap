@@ -9,7 +9,7 @@ A first-person **Marswalk** on real NASA terrain at Mount Sharp, Gale crater, wi
 - a route planner that steers around steep ground;
 - live radiation, ultraviolet (UV) and weather readings replayed from the Curiosity rover, with alerts when conditions turn dangerous.
 
-It runs on a desktop and in virtual reality (VR) on a **Meta Quest 3**. An **augmented reality (AR) mode** shows the HUD and the map over your real room through the headset's passthrough cameras.
+It runs on a desktop and in virtual reality (VR) on a **Meta Quest 3**. An **augmented reality (AR) mode** shows the HUD and the map over your real room through the headset's passthrough cameras, and the map also works with hand tracking.
 
 > **Demo:** recorded from the **`vr-quest`** branch, in VR on a Meta Quest 3.
 > Video: *(add link)*
@@ -18,13 +18,10 @@ It runs on a desktop and in virtual reality (VR) on a **Meta Quest 3**. An **aug
 
 ## Branches
 
-The VR and AR work is being merged into `main`. Until then:
-
 | Branch | What's on it |
 |---|---|
-| `main` | The desktop version: terrain, map layers, navigation, route planning, alerts, dust storm. Also the latest teammate tweaks: F8 green screen, 9 m waypoint arrival, the licence |
-| `vr-quest` | Everything on `main` as of the demo **plus the Meta Quest 3 version**: extended reality (XR) rig, controller input, the VR HUD, offline mode, Quest 3 build settings. **The demo was recorded from this branch** |
-| `vr-quest-ar` | `vr-quest` **plus AR mode** (passthrough): the real room instead of the Mars terrain, with the HUD and the extravehicular activity (EVA) map on top |
+| `main` | **Everything:** the desktop version, the Meta Quest 3 VR version, AR mode and hand tracking (merged from `vr-quest`), plus the F8 green screen and the licence |
+| `vr-quest` | The Quest 3 branch. **The demo was recorded from this branch**; the AR mode and hand tracking were added to it afterwards |
 
 The [VR guide](docs/VR_QUEST.md) covers both the VR and AR builds.
 
@@ -40,7 +37,7 @@ The [VR guide](docs/VR_QUEST.md) covers both the VR and AR builds.
 **Navigation and route planning**
 - **Compass:** arrows to the next waypoint (red) and Home Base (green), plus a readout of heading, pitch, latitude, longitude and elevation.
 - **Minimap:** it turns with you, is coloured by slope hazard zones, and has an "upcoming hills" elevation profile of the ground ahead.
-- **EVA map:** a table-top hologram of the terrain. Drop waypoints on it, and an A* planner routes you around ground steeper than 18° (climbs) or 25° (side slopes).
+- **Extravehicular activity (EVA) map:** a table-top hologram of the terrain. Drop waypoints on it, and an A* planner routes you around ground steeper than 18° (climbs) or 25° (side slopes).
   - **Route details:** distance, a Tobler hiking-time estimate, and an EASY / MODERATE / HARD rating.
   - **On the ground:** a beam marks the next waypoint and a sphere marks Home Base. On reaching a waypoint, the route quietly re-plans from where you stand.
 
@@ -53,16 +50,17 @@ The [VR guide](docs/VR_QUEST.md) covers both the VR and AR builds.
 - **Environment panel** with the live readings, in the headset HUD.
 - **A visible dust storm:** fog, orange tint and blowing dust.
 
-**VR (Meta Quest 3)** (branch `vr-quest`)
+**VR (Meta Quest 3)**
 - Head tracking, left-stick walking, snap turn.
 - The whole HUD on one head-locked panel, laid out like the desktop.
 - **EVA map with a controller laser:** tap the trigger to add a waypoint, hold and drag to turn the hologram.
+- **Hand tracking:** put the controllers down and use the map with your hands: hold your left palm up to open it, point and pinch to add waypoints, pinch with both hands to zoom.
 - **Offline mode:** the headset needs no laptop.
 
-**AR mode** (branch `vr-quest-ar`)
-- **What you see:** your real room through the Quest 3's colour passthrough, with the HUD on top. The Mars terrain, sky and ground markers are hidden.
-- **What stays:** the EVA map hologram floats at table height, and route planning, the compass arrows, the minimap and the alerts all keep working.
-- **Switching:** click the right stick to switch between Mars and AR at any time. Set `"passthrough": true` in `Assets/Resources/marsmap_config.json` to start in AR mode.
+**AR mode (Meta Quest 3)**
+- **What you see:** your real room through the Quest 3's passthrough cameras, with the HUD on top. The Mars terrain, sky, dust and ground markers aren't drawn.
+- **What stays:** the EVA map hologram (kept 30 cm above your real floor), route planning, the compass arrows, the minimap and the alerts all keep working.
+- **Turning it on:** `"ar_passthrough": true` in `Assets/Resources/marsmap_config.json` (the committed setting), then rebuild; `false` gives the normal VR Marswalk. It uses Meta's extended reality (XR) software development kit (SDK), the Meta XR Core SDK; if passthrough can't start, the app stays in VR.
 
 ### Real data vs. simulated
 
@@ -102,10 +100,10 @@ The scripts relaunch themselves inside `.venv`, so plain `python3` works.
 
 ## Quick start (VR and AR, Meta Quest 3)
 
-Check out `vr-quest` (VR) or `vr-quest-ar` (VR + AR mode). Build the Android app and install it over Universal Serial Bus (USB) with Unity's **Build And Run**.
+Build the Android app from `main` and install it over Universal Serial Bus (USB) with Unity's **Build And Run**.
 
 The full, tested setup is in **[docs/VR_QUEST.md](docs/VR_QUEST.md)**, including the steps that are easy to miss.
-- **AR mode** needs a few more settings: two packages, three OpenXR (the open standard for VR and AR devices) features and Android API (application programming interface) level 32.
+- **AR mode and hands** use the Meta XR Core SDK and XR Hands packages (already in `Packages/manifest.json`). The editor applies their OpenXR (the open standard for VR and AR devices) and Meta settings itself; Android API (application programming interface) level 32 is already set.
 - **Offline:** the terrain and the EVA replay are packed into the app, so the headset needs no laptop. Press **X** to start the EVA.
 - **Live from the laptop:** start the server with `--host 0.0.0.0` *before* opening the app, and put the laptop's Wi-Fi address in `Assets/Resources/marsmap_config.json`.
 
@@ -121,20 +119,20 @@ The full, tested setup is in **[docs/VR_QUEST.md](docs/VR_QUEST.md)**, including
 | Test dust gust | G | Y |
 | Start EVA (offline mode) | Enter | X |
 | Minimap zoom / hazard colours | + / −, H | Right stick up / down |
-| EVA map open / close | M | Menu button (left controller) |
-| AR mode on / off (`vr-quest-ar`) | P (preview over black) | Click the right stick |
-| Green screen for screenshots (`main`) | F8 | |
+| EVA map open / close | M | Menu button (left controller); hands: left palm up, held ~0.7 s |
+| AR mode | | `"ar_passthrough"` in the config file (rebuild) |
+| Green screen for screenshots | F8 | |
 
 **On the EVA map:**
 
-| Action | Desktop | Quest 3 |
-|---|---|---|
-| Add waypoint | Click | Tap the trigger |
-| Turn / tilt | Drag; Q / E | Hold the trigger and drag; right stick |
-| Remove waypoint | Shift + click | Point at the pin, A |
-| Zoom | Scroll | Right stick up / down |
-| Move the area | W A S D / right-drag | Left stick |
-| Top-down, centre on me, undo, clear, return home | T, F, Backspace, C, R | Panel buttons |
+| Action | Desktop | Quest 3 controllers | Hands |
+|---|---|---|---|
+| Add waypoint | Click | Tap the trigger | Point and pinch |
+| Turn / tilt | Drag; Q / E | Hold the trigger and drag; right stick | Pinch, hold and move |
+| Remove waypoint | Shift + click | Point at the pin, A | Point at the pin and pinch |
+| Zoom | Scroll | Right stick up / down | Pinch with both hands, spread / bring together |
+| Move the area | W A S D / right-drag | Left stick | Pinch with both hands and move them |
+| Top-down, centre on me, undo, clear, return home | T, F, Backspace, C, R | Panel buttons | Point at a panel button and pinch |
 
 ---
 
@@ -154,7 +152,7 @@ flowchart LR
   subgraph Unity["Unity (desktop, Quest 3 VR or AR)"]
     PC["PythonConnection"] --> T["Terraingen + TerrainOverlay"]
     PC --> HUD["Compass, nav, minimap,<br/>EVA map, alerts, dust"]
-    VR["VR rig + VR HUD<br/>AR: passthrough"]
+    VR["VR rig + VR HUD, hands<br/>AR: Meta passthrough"]
   end
   MS --> SRV
   DB --> SRV
@@ -166,8 +164,8 @@ flowchart LR
 - **Python** prepares NASA data and runs a local WebSocket server. It sends Unity the terrain and map images, plans routes, and relays the replayed telemetry and alerts.
 - **Unity** builds the terrain at runtime and draws the HUD.
   - **In a headset,** the same scene switches to VR by itself.
-  - **In AR mode,** the terrain stays loaded (for the map and readouts) but isn't drawn, so the passthrough room shows behind the HUD.
-- **For the headset** *(vr-quest)*, `Python/export_offline.py` packs the server's messages into the app, for offline use.
+  - **In AR mode,** the terrain stays loaded (for the map and readouts) but isn't drawn: the cameras draw only the user interface (UI) layer over see-through black, so the passthrough room shows behind the HUD.
+- **For the headset,** `Python/export_offline.py` packs the server's messages into the app, for offline use.
 
 ### Repo map
 
@@ -175,9 +173,10 @@ flowchart LR
 |---|---|
 | `Assets/Scenes/GetStarted_Scene.unity` | The one scene |
 | `Assets/SourceFiles/Scripts/` | Unity scripts: connection, terrain, layers, movement, compass, nav, minimap, EVA map, alerts, dust, sky, green screen |
-| `Assets/SourceFiles/Scripts/VR/` | (`vr-quest`) VR rig, controller input, VR HUD, VR versions of the minimap / map / alerts, config; (`vr-quest-ar`) `PassthroughView` for AR mode |
-| `Assets/Resources/marsmap_config.json` | (`vr-quest`) Server address and VR / AR settings |
-| `Assets/StreamingAssets/Marsmap/` | (`vr-quest`) Offline bundle for the headset (terrain + EVA replay) |
+| `Assets/SourceFiles/Scripts/VR/` | VR rig, controller input, VR HUD, VR versions of the minimap / map / alerts, config; AR mode (`ARView`, `MapViewAR`); hand tracking (`HandInput`, `MapViewHands`) |
+| `Assets/SourceFiles/Scripts/AR/` | Meta passthrough (`Meta/MetaPassthrough.cs`, compiled only with the Meta XR Core SDK), its editor setup, and the bridge to `ARView` |
+| `Assets/Resources/marsmap_config.json` | Server address, VR settings, AR on / off |
+| `Assets/StreamingAssets/Marsmap/` | Offline bundle for the headset (terrain + EVA replay) |
 | `Python/` | Server, replay, alerts, route planner, data-prep scripts, data files ([Python/README.md](Python/README.md)) |
 | `Python/Mars_mapping*.ipynb` | The team's route-planning and trail-recommender notebooks |
 | `docs/` | Project report, alert system, VR / AR guide |
