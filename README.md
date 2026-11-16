@@ -19,7 +19,7 @@ It runs on a desktop and in virtual reality (VR) on a **Meta Quest 3**. An **aug
 
 ## Project status
 
-The hackathon is over and this repository is kept as a **public demonstration**. Everything is on **`main`**: the desktop version, the Meta Quest 3 VR version, AR mode and hand tracking, the F8 green screen and the licence. The VR and AR work was built on a `vr-quest` branch, which has been merged into `main` and deleted.
+The hackathon is over and this repository is kept as a **public demonstration**. It holds the whole project: the desktop version, the Meta Quest 3 VR version, AR mode and hand tracking, the F8 green screen and the licence.
 
 The [VR guide](docs/VR_QUEST.md) covers both the VR and AR builds.
 
@@ -98,7 +98,7 @@ The scripts relaunch themselves inside `.venv`, so plain `python3` works.
 
 ## Quick start (VR and AR, Meta Quest 3)
 
-Build the Android app from `main` and install it over Universal Serial Bus (USB) with Unity's **Build And Run**.
+Build the Android app and install it over Universal Serial Bus (USB) with Unity's **Build And Run**.
 
 The full, tested setup is in **[docs/VR_QUEST.md](docs/VR_QUEST.md)**, including the steps that are easy to miss.
 - **AR mode and hands** use the Meta XR Core SDK and XR Hands packages (already in `Packages/manifest.json`). The editor applies their OpenXR (the open standard for VR and AR devices) and Meta settings itself; Android API (application programming interface) level 32 is already set.
